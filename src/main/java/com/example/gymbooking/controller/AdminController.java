@@ -101,21 +101,38 @@ public class AdminController {
             detail.put("requestedAt", gym.getRequestedAt());
             detail.put("approvedAt", gym.getApprovedAt());
             detail.put("createdAt", gym.getCreatedAt());
-            detail.put("slotsCount", slotRepository.countByGym(gym));
-            detail.put("availableSlotsCount", slotRepository.countByGymAndAvailableTrue(gym));
-            detail.put("bookingsCount", bookingRepository.countByGym(gym));
-            detail.put("pendingBookings", bookingRepository.countByGymAndStatus(gym, "PENDING"));
-            detail.put("confirmedBookings", bookingRepository.countByGymAndStatus(gym, "CONFIRMED"));
-            detail.put("canceledBookings", bookingRepository.countByGymAndStatus(gym, "CANCELLED"));
-            if (gym.getOwnerUser() != null) {
-                Map<String, Object> ownerInfo = new HashMap<>();
-                ownerInfo.put("id", gym.getOwnerUser().getId());
-                ownerInfo.put("username", gym.getOwnerUser().getUsername());
-                ownerInfo.put("email", gym.getOwnerUser().getEmail());
-                ownerInfo.put("fullName", getFullName(gym.getOwnerUser()));
-                detail.put("owner", ownerInfo);
-            } else {
+
+            try {
+                detail.put("slotsCount", slotRepository.countByGym(gym));
+                detail.put("availableSlotsCount", slotRepository.countByGymAndAvailableTrue(gym));
+                detail.put("bookingsCount", bookingRepository.countByGym(gym));
+                detail.put("pendingBookings", bookingRepository.countByGymAndStatus(gym, "PENDING"));
+                detail.put("confirmedBookings", bookingRepository.countByGymAndStatus(gym, "CONFIRMED"));
+                detail.put("canceledBookings", bookingRepository.countByGymAndStatus(gym, "CANCELLED"));
+            } catch (Exception ex) {
+                detail.put("slotsCount", 0L);
+                detail.put("availableSlotsCount", 0L);
+                detail.put("bookingsCount", 0L);
+                detail.put("pendingBookings", 0L);
+                detail.put("confirmedBookings", 0L);
+                detail.put("canceledBookings", 0L);
+                detail.put("statsError", ex.getMessage());
+            }
+
+            try {
+                if (gym.getOwnerUser() != null) {
+                    Map<String, Object> ownerInfo = new HashMap<>();
+                    ownerInfo.put("id", gym.getOwnerUser().getId());
+                    ownerInfo.put("username", gym.getOwnerUser().getUsername());
+                    ownerInfo.put("email", gym.getOwnerUser().getEmail());
+                    ownerInfo.put("fullName", getFullName(gym.getOwnerUser()));
+                    detail.put("owner", ownerInfo);
+                } else {
+                    detail.put("owner", null);
+                }
+            } catch (Exception ex) {
                 detail.put("owner", null);
+                detail.put("ownerError", ex.getMessage());
             }
             return detail;
         }).collect(Collectors.toList());
@@ -347,7 +364,7 @@ public class AdminController {
     /**
      * Бүх хэрэглэгчдийг авах
      */
-    @GetMapping("/users")
+    @GetMapping({"/users", "/users/list"})
     public ResponseEntity<List<User>> getAllUsers() {
         List<User> users = userRepository.findAll();
         return ResponseEntity.ok(users);
@@ -549,7 +566,7 @@ public class AdminController {
     /**
      * Системийн админ - захиалгын мэдээлэл (optional filter дэмжинэ).
      */
-    @GetMapping("/system/bookings")
+    @GetMapping({"/system/bookings", "/bookings/detailed"})
     public ResponseEntity<List<Map<String, Object>>> getSystemBookings(
             @RequestParam(required = false) String status,
             @RequestParam(required = false) LocalDate fromDate,
