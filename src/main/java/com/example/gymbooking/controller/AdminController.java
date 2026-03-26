@@ -2,9 +2,11 @@ package com.example.gymbooking.controller;
 
 import com.example.gymbooking.model.Gym;
 import com.example.gymbooking.model.Notification;
+import com.example.gymbooking.model.Payment;
 import com.example.gymbooking.model.User;
 import com.example.gymbooking.repository.BookingRepository;
 import com.example.gymbooking.repository.GymRepository;
+import com.example.gymbooking.repository.PaymentRepository;
 import com.example.gymbooking.repository.SlotRepository;
 import com.example.gymbooking.repository.UserRepository;
 import com.example.gymbooking.service.NotificationService;
@@ -13,6 +15,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
+import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
@@ -28,17 +32,20 @@ public class AdminController {
     private final BookingRepository bookingRepository;
     private final SlotRepository slotRepository;
     private final UserRepository userRepository;
+    private final PaymentRepository paymentRepository;
     private final NotificationService notificationService;
 
     public AdminController(GymRepository gymRepository,
                            BookingRepository bookingRepository,
                            SlotRepository slotRepository,
                            UserRepository userRepository,
+                           PaymentRepository paymentRepository,
                            NotificationService notificationService) {
         this.gymRepository = gymRepository;
         this.bookingRepository = bookingRepository;
         this.slotRepository = slotRepository;
         this.userRepository = userRepository;
+        this.paymentRepository = paymentRepository;
         this.notificationService = notificationService;
     }
 
@@ -496,6 +503,242 @@ public class AdminController {
         stats.put("timestamp", LocalDateTime.now());
 
         return ResponseEntity.ok(stats);
+    }
+
+    // ================== SYSTEM ADMIN PANELS ==================
+
+    /**
+     * Системийн админ - хэрэглэгчдийн жагсаалт (зөвхөн USER role).
+     */
+    @GetMapping("/system/users")
+    public ResponseEntity<List<Map<String, Object>>> getSystemUsers() {
+        List<Map<String, Object>> users = userRepository.findByRole("USER")
+                .stream()
+                .map(this::buildUserPanelRow)
+                .collect(Collectors.toList());
+
+        return ResponseEntity.ok(users);
+    }
+
+    /**
+     * Системийн админ - заалны админуудын жагсаалт.
+     */
+    @GetMapping("/system/gym-admins")
+    public ResponseEntity<List<Map<String, Object>>> getSystemGymAdmins() {
+        List<Map<String, Object>> admins = userRepository.findByRole("GYM_ADMIN")
+                .stream()
+                .map(user -> {
+                    Map<String, Object> row = buildUserPanelRow(user);
+                    if (user.getGym() != null) {
+                        Map<String, Object> gymInfo = new HashMap<>();
+                        gymInfo.put("id", user.getGym().getId());
+                        gymInfo.put("name", user.getGym().getName());
+                        gymInfo.put("approved", user.getGym().isApproved());
+                        gymInfo.put("active", user.getGym().isActive());
+                        row.put("gym", gymInfo);
+                    } else {
+                        row.put("gym", null);
+                    }
+                    return row;
+                })
+                .collect(Collectors.toList());
+
+        return ResponseEntity.ok(admins);
+    }
+
+    /**
+     * Системийн админ - захиалгын мэдээлэл (optional filter дэмжинэ).
+     */
+    @GetMapping("/system/bookings")
+    public ResponseEntity<List<Map<String, Object>>> getSystemBookings(
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) LocalDate fromDate,
+            @RequestParam(required = false) LocalDate toDate) {
+
+        List<Map<String, Object>> bookings = bookingRepository.findAll().stream()
+                .filter(booking -> status == null || status.equalsIgnoreCase(booking.getStatus()))
+                .filter(booking -> fromDate == null ||
+                        (booking.getDate() != null && !booking.getDate().isBefore(fromDate)))
+                .filter(booking -> toDate == null ||
+                        (booking.getDate() != null && !booking.getDate().isAfter(toDate)))
+                .map(booking -> {
+                    Map<String, Object> row = new HashMap<>();
+                    row.put("id", booking.getId());
+                    row.put("status", booking.getStatus());
+                    row.put("approved", booking.isApproved());
+                    row.put("date", booking.getDate());
+                    row.put("time", booking.getTime());
+                    row.put("totalPrice", booking.getTotalPrice());
+                    row.put("createdAt", booking.getCreatedAt());
+                    row.put("confirmedAt", booking.getConfirmedAt());
+                    if (booking.getUser() != null) {
+                        Map<String, Object> userInfo = new HashMap<>();
+                        userInfo.put("id", booking.getUser().getId());
+                        userInfo.put("username", booking.getUser().getUsername());
+                        userInfo.put("fullName", getFullName(booking.getUser()));
+                        userInfo.put("email", booking.getUser().getEmail());
+                        userInfo.put("phone", booking.getUser().getPhone());
+                        row.put("user", userInfo);
+                    } else {
+                        row.put("user", null);
+                    }
+
+                    if (booking.getGym() != null) {
+                        Map<String, Object> gymInfo = new HashMap<>();
+                        gymInfo.put("id", booking.getGym().getId());
+                        gymInfo.put("name", booking.getGym().getName());
+                        row.put("gym", gymInfo);
+                    } else {
+                        row.put("gym", null);
+                    }
+
+                    if (booking.getPayment() != null) {
+                        Map<String, Object> paymentInfo = new HashMap<>();
+                        paymentInfo.put("id", booking.getPayment().getId());
+                        paymentInfo.put("status", booking.getPayment().getStatus());
+                        paymentInfo.put("method", booking.getPayment().getPaymentMethod());
+                        paymentInfo.put("amount", booking.getPayment().getAmount());
+                        paymentInfo.put("transactionId", booking.getPayment().getTransactionId());
+                        paymentInfo.put("paidAt", booking.getPayment().getPaidAt());
+                        row.put("payment", paymentInfo);
+                    } else {
+                        row.put("payment", null);
+                    }
+                    return row;
+                })
+                .collect(Collectors.toList());
+
+        return ResponseEntity.ok(bookings);
+    }
+
+    /**
+     * Системийн админ - төлбөрийн нэгдсэн мэдээлэл.
+     */
+    @GetMapping("/system/payments/summary")
+    public ResponseEntity<Map<String, Object>> getPaymentSummary() {
+        List<Payment> payments = paymentRepository.findAll();
+
+        BigDecimal totalAmount = payments.stream()
+                .map(Payment::getAmount)
+                .filter(amount -> amount != null)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        BigDecimal paidAmount = payments.stream()
+                .filter(payment -> "PAID".equalsIgnoreCase(payment.getStatus()))
+                .map(Payment::getAmount)
+                .filter(amount -> amount != null)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        BigDecimal pendingAmount = payments.stream()
+                .filter(payment -> "PENDING".equalsIgnoreCase(payment.getStatus()))
+                .map(Payment::getAmount)
+                .filter(amount -> amount != null)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        Map<String, Long> statusBreakdown = payments.stream()
+                .collect(Collectors.groupingBy(
+                        payment -> payment.getStatus() == null ? "UNKNOWN" : payment.getStatus().toUpperCase(),
+                        Collectors.counting()
+                ));
+
+        Map<String, BigDecimal> methodBreakdown = payments.stream()
+                .filter(payment -> payment.getPaymentMethod() != null && payment.getAmount() != null)
+                .collect(Collectors.groupingBy(
+                        payment -> payment.getPaymentMethod().toUpperCase(),
+                        Collectors.reducing(BigDecimal.ZERO, Payment::getAmount, BigDecimal::add)
+                ));
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("totalTransactions", payments.size());
+        result.put("totalAmount", totalAmount);
+        result.put("paidAmount", paidAmount);
+        result.put("pendingAmount", pendingAmount);
+        result.put("statusBreakdown", statusBreakdown);
+        result.put("methodBreakdown", methodBreakdown);
+        result.put("latestPayments", payments.stream()
+                .sorted((a, b) -> {
+                    LocalDateTime aCreated = a.getCreatedAt();
+                    LocalDateTime bCreated = b.getCreatedAt();
+                    if (aCreated == null && bCreated == null) {
+                        return 0;
+                    }
+                    if (aCreated == null) {
+                        return 1;
+                    }
+                    if (bCreated == null) {
+                        return -1;
+                    }
+                    return bCreated.compareTo(aCreated);
+                })
+                .limit(20)
+                .map(payment -> {
+                    Map<String, Object> paymentInfo = new HashMap<>();
+                    paymentInfo.put("id", payment.getId());
+                    paymentInfo.put("amount", payment.getAmount());
+                    paymentInfo.put("status", payment.getStatus());
+                    paymentInfo.put("paymentMethod", payment.getPaymentMethod());
+                    paymentInfo.put("transactionId", payment.getTransactionId());
+                    paymentInfo.put("paidAt", payment.getPaidAt());
+                    paymentInfo.put("createdAt", payment.getCreatedAt());
+                    paymentInfo.put("bookingId", payment.getBooking() != null ? payment.getBooking().getId() : null);
+                    paymentInfo.put("userId", payment.getUserId());
+                    return paymentInfo;
+                })
+                .collect(Collectors.toList()));
+        result.put("generatedAt", LocalDateTime.now());
+
+        return ResponseEntity.ok(result);
+    }
+
+    /**
+     * Системийн админ - шинэ заалны хүсэлтүүд.
+     */
+    @GetMapping("/system/gym-requests")
+    public ResponseEntity<List<Map<String, Object>>> getGymRequests() {
+        List<Map<String, Object>> requests = gymRepository.findByApprovedFalse()
+                .stream()
+                .map(gym -> {
+                    Map<String, Object> row = new HashMap<>();
+                    row.put("id", gym.getId());
+                    row.put("name", gym.getName());
+                    row.put("location", gym.getLocation());
+                    row.put("description", gym.getDescription());
+                    row.put("phone", gym.getPhone());
+                    row.put("requestedAt", gym.getRequestedAt());
+                    row.put("createdAt", gym.getCreatedAt());
+                    row.put("active", gym.isActive());
+                    if (gym.getOwnerUser() != null) {
+                        Map<String, Object> ownerInfo = new HashMap<>();
+                        ownerInfo.put("id", gym.getOwnerUser().getId());
+                        ownerInfo.put("username", gym.getOwnerUser().getUsername());
+                        ownerInfo.put("fullName", getFullName(gym.getOwnerUser()));
+                        ownerInfo.put("email", gym.getOwnerUser().getEmail());
+                        ownerInfo.put("phone", gym.getOwnerUser().getPhone());
+                        row.put("owner", ownerInfo);
+                    } else {
+                        row.put("owner", null);
+                    }
+                    row.put("slotsCount", slotRepository.countByGym(gym));
+                    row.put("bookingsCount", bookingRepository.countByGym(gym));
+                    return row;
+                })
+                .collect(Collectors.toList());
+
+        return ResponseEntity.ok(requests);
+    }
+
+    private Map<String, Object> buildUserPanelRow(User user) {
+        Map<String, Object> row = new HashMap<>();
+        row.put("id", user.getId());
+        row.put("username", user.getUsername());
+        row.put("email", user.getEmail());
+        row.put("phone", user.getPhone());
+        row.put("firstName", user.getFirstName());
+        row.put("lastName", user.getLastName());
+        row.put("fullName", getFullName(user));
+        row.put("role", user.getRole());
+        row.put("verified", user.isVerified());
+        return row;
     }
 
     /**
