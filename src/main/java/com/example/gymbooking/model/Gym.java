@@ -48,6 +48,9 @@ public class Gym {
     @OneToMany(mappedBy = "gym", cascade = CascadeType.ALL)
     private List<Booking> bookings;
 
+    @OneToMany(mappedBy = "gym", cascade = CascadeType.ALL)
+    private List<GymComment> comments;
+
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 
@@ -163,6 +166,14 @@ public class Gym {
 
     public void setBookings(List<Booking> bookings) {
         this.bookings = bookings;
+    }
+
+    public List<GymComment> getComments() {
+        return comments;
+    }
+
+    public void setComments(List<GymComment> comments) {
+        this.comments = comments;
     }
 
     public LocalDateTime getCreatedAt() {
