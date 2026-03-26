@@ -18,6 +18,8 @@ import org.springframework.web.bind.annotation.*;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -608,6 +610,47 @@ public class AdminController {
     }
 
     /**
+     * Системийн админ - gym admin хүсэлтийг батлах.
+     */
+    @PutMapping("/system/gym-admins/{id}/approve")
+    public ResponseEntity<Map<String, Object>> approveGymAdmin(@PathVariable Long id) {
+        User gymAdmin = userRepository.findById(id).orElse(null);
+        if (gymAdmin == null || !"GYM_ADMIN".equalsIgnoreCase(gymAdmin.getRole())) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(Map.of("success", false, "message", "Gym admin олдсонгүй."));
+        }
+
+        gymAdmin.setVerified(true);
+        User savedUser = userRepository.save(gymAdmin);
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("success", true);
+        response.put("message", "Gym admin амжилттай батлагдлаа.");
+        response.put("gymAdmin", buildUserPanelRow(savedUser));
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Системийн админ - gym admin хүсэлтийг устгах.
+     */
+    @DeleteMapping("/system/gym-admins/{id}")
+    public ResponseEntity<Map<String, Object>> deleteGymAdminRequest(@PathVariable Long id) {
+        User gymAdmin = userRepository.findById(id).orElse(null);
+        if (gymAdmin == null || !"GYM_ADMIN".equalsIgnoreCase(gymAdmin.getRole())) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(Map.of("success", false, "message", "Gym admin олдсонгүй."));
+        }
+
+        String username = gymAdmin.getUsername();
+        userRepository.delete(gymAdmin);
+        return ResponseEntity.ok(Map.of(
+                "success", true,
+                "message", "Gym admin хүсэлт устгагдлаа.",
+                "username", username
+        ));
+    }
+
+    /**
      * Системийн админ - захиалгын мэдээлэл (optional filter дэмжинэ).
      */
     @GetMapping({"/system/bookings", "/bookings/detailed"})
@@ -817,6 +860,88 @@ public class AdminController {
         result.put("unreadCount", notificationService.getUnreadNotificationCount(admin.getId()));
         result.put("totalCount", notificationService.getTotalNotificationCount(admin.getId()));
         return ResponseEntity.ok(result);
+    }
+
+    /**
+     * Системийн админ самбар дээр харуулах action-той мэдэгдлүүд.
+     */
+    @GetMapping("/system/notifications")
+    public ResponseEntity<Map<String, Object>> getSystemActionNotifications() {
+        List<Map<String, Object>> notifications = new ArrayList<>();
+
+        List<User> gymAdminRequests = userRepository.findByRole("GYM_ADMIN")
+                .stream()
+                .filter(user -> !user.isVerified())
+                .collect(Collectors.toList());
+
+        for (User gymAdmin : gymAdminRequests) {
+            Map<String, Object> item = new HashMap<>();
+            item.put("id", "gym-admin-" + gymAdmin.getId());
+            item.put("type", "GYM_ADMIN_REQUEST");
+            item.put("title", "👤 Шинэ заалны админ хүсэлт");
+            item.put("message", String.format("\"%s\" заалны админ хүсэлт гаргасан байна.", gymAdmin.getUsername()));
+            item.put("createdAt", null);
+            item.put("read", false);
+            item.put("data", buildUserPanelRow(gymAdmin));
+            item.put("actions", List.of(
+                    Map.of(
+                            "label", "Батлах",
+                            "method", "PUT",
+                            "endpoint", "/admin/system/gym-admins/" + gymAdmin.getId() + "/approve"
+                    ),
+                    Map.of(
+                            "label", "Устгах",
+                            "method", "DELETE",
+                            "endpoint", "/admin/system/gym-admins/" + gymAdmin.getId()
+                    )
+            ));
+            notifications.add(item);
+        }
+
+        List<Gym> gymRequests = gymRepository.findByApprovedFalse();
+        for (Gym gym : gymRequests) {
+            Map<String, Object> item = new HashMap<>();
+            item.put("id", "gym-request-" + gym.getId());
+            item.put("type", "GYM_REQUEST");
+            item.put("title", "📋 Шинэ заалны хүсэлт");
+            item.put("message", String.format("\"%s\" заал баталгаажуулалт хүлээж байна.", gym.getName()));
+            item.put("createdAt", gym.getRequestedAt() != null ? gym.getRequestedAt() : gym.getCreatedAt());
+            item.put("read", false);
+
+            Map<String, Object> gymData = new HashMap<>();
+            gymData.put("id", gym.getId());
+            gymData.put("name", gym.getName());
+            gymData.put("location", gym.getLocation());
+            gymData.put("phone", gym.getPhone());
+            gymData.put("requestedAt", gym.getRequestedAt());
+            gymData.put("createdAt", gym.getCreatedAt());
+            item.put("data", gymData);
+
+            item.put("actions", List.of(
+                    Map.of(
+                            "label", "Батлах",
+                            "method", "PUT",
+                            "endpoint", "/admin/gyms/" + gym.getId() + "/approve"
+                    ),
+                    Map.of(
+                            "label", "Устгах",
+                            "method", "DELETE",
+                            "endpoint", "/admin/gyms/" + gym.getId()
+                    )
+            ));
+            notifications.add(item);
+        }
+
+        notifications.sort(Comparator.comparing(
+                n -> (LocalDateTime) n.get("createdAt"),
+                Comparator.nullsLast(Comparator.reverseOrder())
+        ));
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("notifications", notifications);
+        response.put("unreadCount", notifications.size());
+        response.put("totalCount", notifications.size());
+        return ResponseEntity.ok(response);
     }
 
 }
