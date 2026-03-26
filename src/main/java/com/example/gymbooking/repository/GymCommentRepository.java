@@ -1,0 +1,10 @@
+package com.example.gymbooking.repository;
+
+import com.example.gymbooking.model.GymComment;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+import java.util.List;
+
+public interface GymCommentRepository extends JpaRepository<GymComment, Long> {
+    List<GymComment> findByGymIdOrderByCreatedAtDesc(Long gymId);
+}
