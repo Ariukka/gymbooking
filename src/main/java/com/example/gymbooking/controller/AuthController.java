@@ -304,26 +304,60 @@ return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         System.out.println("Request body: " + request);
         
         String email = request.get("email");
-        String otp = request.get("otp");
-        String tempToken = request.get("tempToken");
+        String otp = request.getOrDefault("otp", request.get("code"));
+        String tempToken = request.getOrDefault("tempToken", request.get("token"));
+        String phone = request.get("phone");
 
         System.out.println("Email: " + email);
         System.out.println("OTP: " + otp);
         System.out.println("TempToken: " + tempToken);
 
-        // Support both OTP verification and tempToken flow
+        // Some clients call this endpoint after successful /register/verify-otp.
+        // In that flow, OTP data may be missing, but user is already created.
         if (email == null || otp == null) {
-            // Check if using tempToken flow
-            if (tempToken != null) {
-                email = request.get("email");
-                otp = request.get("otp");
-                System.out.println("Using tempToken flow - Email: " + email + ", OTP: " + otp);
-            } else {
-                Map<String, Object> response = new HashMap<>();
-                response.put("success", false);
-                response.put("message", "Имэйл болон кодыг оруулна уу");
-                return ResponseEntity.badRequest().body(response);
+            if (email == null && phone == null && tempToken != null) {
+                try {
+                    phone = jwtUtil.getUsernameFromToken(tempToken);
+                    System.out.println("Resolved phone from token: " + phone);
+                } catch (Exception e) {
+                    System.out.println("Failed to resolve phone from token: " + e.getMessage());
+                }
             }
+
+            Optional<User> existingUserOpt = Optional.empty();
+            if (email != null && !email.isBlank()) {
+                existingUserOpt = userRepository.findByEmail(email);
+            } else if (phone != null && !phone.isBlank()) {
+                existingUserOpt = userRepository.findByPhone(phone);
+            }
+
+            if (existingUserOpt.isPresent() && Boolean.TRUE.equals(existingUserOpt.get().getVerified())) {
+                User existingUser = existingUserOpt.get();
+                String token = jwtUtil.generateToken(existingUser.getUsername());
+
+                Map<String, Object> userMap = new HashMap<>();
+                userMap.put("id", existingUser.getId());
+                userMap.put("name", (existingUser.getFirstName() != null ? existingUser.getFirstName() : "") +
+                        (existingUser.getLastName() != null ? " " + existingUser.getLastName() : ""));
+                userMap.put("firstName", existingUser.getFirstName() != null ? existingUser.getFirstName() : "");
+                userMap.put("lastName", existingUser.getLastName() != null ? existingUser.getLastName() : "");
+                userMap.put("phone", existingUser.getPhone());
+                userMap.put("email", existingUser.getEmail() != null ? existingUser.getEmail() : "");
+                userMap.put("role", existingUser.getRole());
+
+                Map<String, Object> response = new HashMap<>();
+                response.put("success", true);
+                response.put("message", "Бүртгэл амжилттай баталгаажлаа");
+                response.put("token", token);
+                response.put("user", userMap);
+
+                return ResponseEntity.ok(response);
+            }
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", "Имэйл болон кодыг оруулна уу");
+            return ResponseEntity.badRequest().body(response);
         }
 
         String savedOtp = registerOtpStore.get(email);
