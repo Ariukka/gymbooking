@@ -1,6 +1,7 @@
 // Gym.java entity-д нэмэх
 package com.example.gymbooking.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -26,6 +27,7 @@ public class Gym {
 
     @ManyToOne
     @JoinColumn(name = "owner_user_id")
+    @JsonIgnoreProperties({"gym", "password", "authorities"})
     private User ownerUser;
 
     @Column(name = "is_approved")
@@ -116,7 +118,7 @@ public class Gym {
     }
 
     public boolean isApproved() {
-        return approved;
+        return Boolean.TRUE.equals(approved);
     }
 
     public void setApproved(boolean approved) {
@@ -124,7 +126,7 @@ public class Gym {
     }
 
     public boolean isActive() {
-        return active;
+        return Boolean.TRUE.equals(active);
     }
 
     public void setActive(boolean active) {
