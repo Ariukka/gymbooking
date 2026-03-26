@@ -20,7 +20,7 @@ public class NotificationController {
     /**
      * Хэрэглэгчийн өөрийн мэдэгдлүүдийг авах
      */
-    @GetMapping("/my-notifications")
+    @GetMapping({"/my-notifications", "/my"})
     public ResponseEntity<List<Notification>> getMyNotifications(@AuthenticationPrincipal User currentUser) {
         List<Notification> notifications = notificationService.getMyNotifications(currentUser);
         return ResponseEntity.ok(notifications);
