@@ -331,7 +331,7 @@ return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
                 existingUserOpt = userRepository.findByPhone(phone);
             }
 
-            if (existingUserOpt.isPresent() && Boolean.TRUE.equals(existingUserOpt.get().getVerified())) {
+            if (existingUserOpt.isPresent() && existingUserOpt.get().isVerified()) {
                 User existingUser = existingUserOpt.get();
                 String token = jwtUtil.generateToken(existingUser.getUsername());
 
