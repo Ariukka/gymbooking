@@ -19,6 +19,7 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
     List<Booking> findByGym_IdAndSlot_Date(Long gymId, LocalDate date);
     long countByGym(Gym gym);
     long countByGymAndStatus(Gym gym, String status);
+    long countByStatusIn(List<String> statuses);
 
     @Query("SELECT b FROM Booking b WHERE b.gym = :gym AND b.slot.date = CURRENT_DATE")
     List<Booking> findTodaysBookingsByGym(@Param("gym") Gym gym);

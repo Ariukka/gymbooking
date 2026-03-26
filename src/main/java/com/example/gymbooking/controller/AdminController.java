@@ -517,9 +517,36 @@ public class AdminController {
         Map<String, Object> stats = new HashMap<>();
         stats.put("gyms", gymStats);
         stats.put("users", userStats);
+        stats.put("summary", buildSystemUserSummary());
         stats.put("timestamp", LocalDateTime.now());
 
         return ResponseEntity.ok(stats);
+    }
+
+
+    private Map<String, Object> buildSystemUserSummary() {
+        LocalDate today = LocalDate.now();
+        LocalDateTime startOfToday = today.atStartOfDay();
+        LocalDateTime startOfTomorrow = today.plusDays(1).atStartOfDay();
+
+        long totalUsers = userRepository.count();
+        long totalGyms = gymRepository.count();
+        long activeBookings = bookingRepository.countByStatusIn(List.of("PENDING", "CONFIRMED"));
+        long pendingRequests = gymRepository.countByApprovedFalse();
+
+        BigDecimal todaysRevenue = paymentRepository.sumPaidAmountBetween(startOfToday, startOfTomorrow);
+        BigDecimal totalRevenue = paymentRepository.sumPaidAmount();
+
+        Map<String, Object> summary = new HashMap<>();
+        summary.put("totalUsers", totalUsers);
+        summary.put("totalGyms", totalGyms);
+        summary.put("activeBookings", activeBookings);
+        summary.put("todaysRevenue", todaysRevenue);
+        summary.put("pendingRequests", pendingRequests);
+        summary.put("totalRevenue", totalRevenue);
+        summary.put("generatedAt", LocalDateTime.now());
+
+        return summary;
     }
 
     // ================== SYSTEM ADMIN PANELS ==================
@@ -535,6 +562,23 @@ public class AdminController {
                 .collect(Collectors.toList());
 
         return ResponseEntity.ok(users);
+    }
+
+    /**
+     * Системийн админ - хэрэглэгчийн хэсэгт харуулах нэгтгэсэн мэдээлэл.
+     */
+    @GetMapping("/system/users/overview")
+    public ResponseEntity<Map<String, Object>> getSystemUsersOverview() {
+        List<Map<String, Object>> users = userRepository.findByRole("USER")
+                .stream()
+                .map(this::buildUserPanelRow)
+                .collect(Collectors.toList());
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("users", users);
+        response.put("summary", buildSystemUserSummary());
+
+        return ResponseEntity.ok(response);
     }
 
     /**
