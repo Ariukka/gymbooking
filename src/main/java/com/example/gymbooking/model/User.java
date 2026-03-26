@@ -1,6 +1,7 @@
 package com.example.gymbooking.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.persistence.*;
 import org.springframework.security.core.GrantedAuthority;
@@ -37,6 +38,7 @@ public class User implements UserDetails {
     private String role; // ADMIN, GYM_ADMIN, USER, SUPER_ADMIN
 
     @ManyToOne
+    @JsonIgnoreProperties({"ownerUser", "slots", "bookings"})
     private Gym gym; // Gym Admin бол gym-тэй холбоотой
 
     // --- Spring Security ---
