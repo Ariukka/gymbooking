@@ -91,7 +91,7 @@ public class AuthController {
         }
 
         try {
-            Optional<User> userOpt = userRepository.findByUsername(identifier);
+            Optional<User> userOpt = authService.findByUsername(identifier);
             if (userOpt.isEmpty()) {
                 System.out.println("User not found with identifier: " + identifier);
                 Map<String, Object> response = new HashMap<>();
@@ -110,7 +110,22 @@ public class AuthController {
 return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
             }
 
-            String token = jwtUtil.generateToken(user.getUsername());
+            String tokenSubject = user.getUsername();
+            if (tokenSubject == null || tokenSubject.isBlank()) {
+                tokenSubject = (user.getEmail() != null && !user.getEmail().isBlank())
+                        ? user.getEmail()
+                        : user.getPhone();
+            }
+
+            if (tokenSubject == null || tokenSubject.isBlank()) {
+                System.out.println("Missing login identifier for user id: " + user.getId());
+                Map<String, Object> response = new HashMap<>();
+                response.put("success", false);
+                response.put("message", "Хэрэглэгчийн мэдээлэл дутуу байна");
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
+            }
+
+            String token = jwtUtil.generateToken(tokenSubject);
 
             Map<String, Object> userMap = new HashMap<>();
             userMap.put("id", user.getId());
@@ -846,5 +861,4 @@ return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         return ResponseEntity.ok(response);
     }
 }
-
 
