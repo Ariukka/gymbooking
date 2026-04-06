@@ -1,14 +1,20 @@
 package com.example.gymbooking.dto;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 
 public class CreateBookingRequest {
 
+    @JsonAlias({"slot_id", "slotID"})
     private Long slotId;
+    @JsonAlias({"gym_id", "gymID"})
     private Long gymId;
+    @JsonAlias({"bookingDate", "day"})
     private LocalDate date;
+    @JsonAlias({"slotTime", "startTime"})
     private String time;
+    @JsonAlias({"price", "amount"})
     private BigDecimal totalPrice;
 
     public Long getSlotId() {

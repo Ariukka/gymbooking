@@ -70,6 +70,14 @@ public class BookingController {
             return ResponseEntity.status(401).body(Map.of("error", "Unauthorized"));
         }
 
+        String validationError = validateRequest(request);
+        if (validationError != null) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "error", "Invalid request",
+                    "message", validationError
+            ));
+        }
+
         Slot slot = resolveSlot(request);
         if (slot == null) {
             return ResponseEntity.badRequest().body(Map.of(
@@ -131,6 +139,33 @@ public class BookingController {
         }
 
         return ResponseEntity.ok(savedBooking);
+    }
+
+    @GetMapping("/my")
+    public ResponseEntity<?> getMyBookings(@AuthenticationPrincipal User currentUser) {
+        if (currentUser == null) {
+            return ResponseEntity.status(401).body(Map.of("error", "Unauthorized"));
+        }
+        return ResponseEntity.ok(bookingRepository.findByUser_IdOrderByCreatedAtDesc(currentUser.getId()));
+    }
+
+    private String validateRequest(CreateBookingRequest request) {
+        if (request == null) {
+            return "Request body is required.";
+        }
+        if (request.getSlotId() != null) {
+            return null;
+        }
+        if (request.getGymId() == null) {
+            return "gymId is required.";
+        }
+        if (request.getDate() == null) {
+            return "date is required.";
+        }
+        if (request.getTime() == null || request.getTime().isBlank()) {
+            return "time is required.";
+        }
+        return null;
     }
 
     private Slot resolveSlot(CreateBookingRequest request) {
