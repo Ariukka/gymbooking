@@ -17,7 +17,7 @@ import java.util.List;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/gym-admin")
+@RequestMapping({"/api/gym-admin", "/gym-admin"})
 @CrossOrigin(origins = "http://localhost:3000")
 public class GymAdminController {
 
