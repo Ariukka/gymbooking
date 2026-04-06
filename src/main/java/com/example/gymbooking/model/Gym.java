@@ -36,6 +36,11 @@ public class Gym {
     @Column(name = "is_approved")
     private Boolean approved = false;
 
+    // Legacy schema compatibility: some databases still keep `approved` column
+    // as NOT NULL without a default, so we write both columns.
+    @Column(name = "approved")
+    private Boolean legacyApproved = false;
+
     @Column(name = "is_active")
     private Boolean active = true;
 
@@ -61,6 +66,12 @@ public class Gym {
     public void prePersist() {
         if (createdAt == null) {
             createdAt = LocalDateTime.now();
+        }
+        if (approved == null) {
+            approved = false;
+        }
+        if (legacyApproved == null) {
+            legacyApproved = approved;
         }
     }
 
@@ -132,11 +143,12 @@ public class Gym {
     }
 
     public boolean isApproved() {
-        return Boolean.TRUE.equals(approved);
+        return Boolean.TRUE.equals(approved) || Boolean.TRUE.equals(legacyApproved);
     }
 
     public void setApproved(boolean approved) {
         this.approved = approved;
+        this.legacyApproved = approved;
     }
 
     public boolean isActive() {
