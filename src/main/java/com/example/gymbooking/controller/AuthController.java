@@ -21,7 +21,7 @@ import java.util.Optional;
 import java.util.Random;
 
 @RestController
-@RequestMapping("/api/auth")
+@RequestMapping({"/api/auth", "/auth"})
 @CrossOrigin(origins = "http://localhost:3000")
 public class AuthController {
 
@@ -846,6 +846,5 @@ return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         return ResponseEntity.ok(response);
     }
 }
-
 
 
