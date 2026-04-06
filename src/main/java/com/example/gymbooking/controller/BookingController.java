@@ -1,9 +1,12 @@
 package com.example.gymbooking.controller;
 
+import com.example.gymbooking.dto.CreateBookingRequest;
+import com.example.gymbooking.model.Gym;
 import com.example.gymbooking.model.Booking;
 import com.example.gymbooking.model.Slot;
 import com.example.gymbooking.model.User;
 import com.example.gymbooking.repository.BookingRepository;
+import com.example.gymbooking.repository.GymRepository;
 import com.example.gymbooking.repository.SlotRepository;
 import com.example.gymbooking.repository.UserRepository;
 import com.example.gymbooking.service.EmailService;
@@ -30,17 +33,20 @@ public class BookingController {
     private final NotificationService notificationService;
     private final UserRepository userRepository;
     private final SlotRepository slotRepository;
+    private final GymRepository gymRepository;
 
     public BookingController(BookingRepository bookingRepository,
                              EmailService emailService,
                              NotificationService notificationService,
                              UserRepository userRepository,
-                             SlotRepository slotRepository) {
+                             SlotRepository slotRepository,
+                             GymRepository gymRepository) {
         this.bookingRepository = bookingRepository;
         this.emailService = emailService;
         this.notificationService = notificationService;
         this.userRepository = userRepository;
         this.slotRepository = slotRepository;
+        this.gymRepository = gymRepository;
     }
 
     @GetMapping("/how-to-book")
@@ -59,18 +65,17 @@ public class BookingController {
     @PostMapping
     @Transactional
     public ResponseEntity<?> createBooking(@AuthenticationPrincipal User currentUser,
-                                           @RequestBody Booking booking) {
+                                           @RequestBody CreateBookingRequest request) {
         if (currentUser == null) {
             return ResponseEntity.status(401).body(Map.of("error", "Unauthorized"));
         }
 
-        if (booking.getSlot() == null || booking.getSlot().getId() == null) {
-            return ResponseEntity.badRequest().body(Map.of("error", "Slot is required"));
-        }
-
-        Slot slot = slotRepository.findById(booking.getSlot().getId()).orElse(null);
+        Slot slot = resolveSlot(request);
         if (slot == null) {
-            return ResponseEntity.badRequest().body(Map.of("error", "Slot not found"));
+            return ResponseEntity.badRequest().body(Map.of(
+                    "error", "Slot not found",
+                    "message", "slotId эсвэл gymId + date + time утга илгээнэ үү."
+            ));
         }
 
         if (!slot.isAvailable() || !slot.hasCapacity()) {
@@ -83,9 +88,11 @@ public class BookingController {
             return ResponseEntity.badRequest().body(Map.of("error", "Slot already booked"));
         }
 
+        Booking booking = new Booking();
         booking.setUser(currentUser);
         booking.setGym(slot.getGym());
         booking.setSlot(slot);
+        booking.setTotalPrice(request.getTotalPrice() != null ? request.getTotalPrice() : slot.getPrice());
         booking.setStatus("CONFIRMED");
         booking.setApproved(true);
         booking.setConfirmedAt(LocalDateTime.now());
@@ -124,5 +131,39 @@ public class BookingController {
         }
 
         return ResponseEntity.ok(savedBooking);
+    }
+
+    private Slot resolveSlot(CreateBookingRequest request) {
+        if (request == null) {
+            return null;
+        }
+
+        if (request.getSlotId() != null) {
+            return slotRepository.findById(request.getSlotId()).orElse(null);
+        }
+
+        if (request.getGymId() == null || request.getDate() == null || request.getTime() == null) {
+            return null;
+        }
+
+        return slotRepository.findByGymIdAndDateAndTime(
+                request.getGymId(), request.getDate(), request.getTime()
+        ).orElseGet(() -> {
+            Gym gym = gymRepository.findById(request.getGymId()).orElse(null);
+            if (gym == null) {
+                return null;
+            }
+
+            Slot newSlot = new Slot();
+            newSlot.setGym(gym);
+            newSlot.setDate(request.getDate());
+            newSlot.setTime(request.getTime());
+            newSlot.setPrice(request.getTotalPrice());
+            newSlot.setAvailable(true);
+            newSlot.setMaxCapacity(1);
+            newSlot.setCurrentBookings(0);
+
+            return slotRepository.save(newSlot);
+        });
     }
 }
