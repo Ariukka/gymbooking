@@ -24,6 +24,7 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
 
@@ -91,6 +92,13 @@ public class BookingController {
 
         if (!slot.isAvailable() || !slot.hasCapacity()) {
             return ResponseEntity.badRequest().body(Map.of("error", "Selected slot is not available"));
+        }
+
+        if (isSlotInPast(slot)) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "error", "Selected slot is closed",
+                    "message", "Өнгөрсөн цагийн интервалд захиалга хийх боломжгүй."
+            ));
         }
 
         boolean alreadyBooked = bookingRepository.existsBySlot_IdAndStatusIn(
@@ -218,6 +226,20 @@ public class BookingController {
             return candidate;
         }
 
+        if (candidate.contains("-")) {
+            String[] parts = candidate.split("-", 2);
+            String start = normalizeSingleTime(parts[0]);
+            String end = normalizeSingleTime(parts[1]);
+            if (start != null && end != null) {
+                return start + "-" + end;
+            }
+            return candidate.replaceAll("\\s+", "");
+        }
+
+        return normalizeSingleTime(candidate);
+    }
+
+    private String normalizeSingleTime(String candidate) {
         try {
             return LocalTime.parse(candidate, DateTimeFormatter.ofPattern("H:mm"))
                     .format(DateTimeFormatter.ofPattern("HH:mm"));
@@ -235,6 +257,42 @@ public class BookingController {
                     .format(DateTimeFormatter.ofPattern("HH:mm"));
         } catch (DateTimeParseException ignored) {
             return candidate;
+        }
+    }
+
+    private boolean isSlotInPast(Slot slot) {
+        if (slot == null || slot.getDate() == null) {
+            return false;
+        }
+
+        LocalDateTime now = LocalDateTime.now().truncatedTo(ChronoUnit.MINUTES);
+        if (slot.getDate().isBefore(now.toLocalDate())) {
+            return true;
+        }
+
+        if (!slot.getDate().isEqual(now.toLocalDate())) {
+            return false;
+        }
+
+        LocalTime startTime = extractSlotStartTime(slot.getTime());
+        if (startTime == null) {
+            return false;
+        }
+
+        return !startTime.isAfter(now.toLocalTime());
+    }
+
+    private LocalTime extractSlotStartTime(String slotTime) {
+        if (slotTime == null || slotTime.isBlank()) {
+            return null;
+        }
+
+        String normalized = normalizeTime(slotTime);
+        String start = normalized.contains("-") ? normalized.split("-", 2)[0] : normalized;
+        try {
+            return LocalTime.parse(start, DateTimeFormatter.ofPattern("HH:mm"));
+        } catch (DateTimeParseException ignored) {
+            return null;
         }
     }
 }
