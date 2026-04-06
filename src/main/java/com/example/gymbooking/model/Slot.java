@@ -3,10 +3,20 @@ package com.example.gymbooking.model;
 import jakarta.persistence.*;
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
+import java.util.List;
 
 @Entity
 @Table(name = "slots")
 public class Slot {
+
+    private static final List<DateTimeFormatter> SUPPORTED_TIME_FORMATS = List.of(
+            DateTimeFormatter.ofPattern("H:mm"),
+            DateTimeFormatter.ofPattern("H:mm:ss"),
+            DateTimeFormatter.ISO_LOCAL_TIME
+    );
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -103,7 +113,7 @@ public class Slot {
     }
 
     public void setTime(String time) {
-        this.time = time;
+        this.time = normalizeTime(time);
     }
 
     public BigDecimal getPrice() {
@@ -136,5 +146,32 @@ public class Slot {
 
     public void setCurrentBookings(Integer currentBookings) {
         this.currentBookings = currentBookings;
+    }
+
+    @PrePersist
+    @PreUpdate
+    private void normalizeFields() {
+        this.time = normalizeTime(this.time);
+    }
+
+    private static String normalizeTime(String time) {
+        if (time == null) {
+            return null;
+        }
+
+        String candidate = time.trim();
+        if (candidate.isEmpty()) {
+            return candidate;
+        }
+
+        for (DateTimeFormatter formatter : SUPPORTED_TIME_FORMATS) {
+            try {
+                return LocalTime.parse(candidate, formatter).format(DateTimeFormatter.ofPattern("HH:mm"));
+            } catch (DateTimeParseException ignored) {
+                // try next format
+            }
+        }
+
+        return candidate;
     }
 }
