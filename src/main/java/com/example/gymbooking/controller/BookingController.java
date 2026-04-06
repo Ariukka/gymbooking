@@ -21,6 +21,9 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.List;
 import java.util.Map;
 
@@ -173,17 +176,20 @@ public class BookingController {
             return null;
         }
 
+        String normalizedTime = normalizeTime(request.getTime());
+
         if (request.getSlotId() != null) {
             return slotRepository.findById(request.getSlotId()).orElse(null);
         }
 
-        if (request.getGymId() == null || request.getDate() == null || request.getTime() == null) {
+        if (request.getGymId() == null || request.getDate() == null || normalizedTime == null || normalizedTime.isBlank()) {
             return null;
         }
 
-        return slotRepository.findByGymIdAndDateAndTime(
-                request.getGymId(), request.getDate(), request.getTime()
-        ).orElseGet(() -> {
+        return slotRepository.findByGymIdAndDate(request.getGymId(), request.getDate()).stream()
+                .filter(slot -> normalizedTime.equals(normalizeTime(slot.getTime())))
+                .findFirst()
+                .orElseGet(() -> {
             Gym gym = gymRepository.findById(request.getGymId()).orElse(null);
             if (gym == null) {
                 return null;
@@ -192,7 +198,7 @@ public class BookingController {
             Slot newSlot = new Slot();
             newSlot.setGym(gym);
             newSlot.setDate(request.getDate());
-            newSlot.setTime(request.getTime());
+            newSlot.setTime(normalizedTime);
             newSlot.setPrice(request.getTotalPrice());
             newSlot.setAvailable(true);
             newSlot.setMaxCapacity(1);
@@ -200,5 +206,35 @@ public class BookingController {
 
             return slotRepository.save(newSlot);
         });
+    }
+
+    private String normalizeTime(String time) {
+        if (time == null) {
+            return null;
+        }
+
+        String candidate = time.trim();
+        if (candidate.isEmpty()) {
+            return candidate;
+        }
+
+        try {
+            return LocalTime.parse(candidate, DateTimeFormatter.ofPattern("H:mm"))
+                    .format(DateTimeFormatter.ofPattern("HH:mm"));
+        } catch (DateTimeParseException ignored) {
+        }
+
+        try {
+            return LocalTime.parse(candidate, DateTimeFormatter.ofPattern("H:mm:ss"))
+                    .format(DateTimeFormatter.ofPattern("HH:mm"));
+        } catch (DateTimeParseException ignored) {
+        }
+
+        try {
+            return LocalTime.parse(candidate, DateTimeFormatter.ISO_LOCAL_TIME)
+                    .format(DateTimeFormatter.ofPattern("HH:mm"));
+        } catch (DateTimeParseException ignored) {
+            return candidate;
+        }
     }
 }
