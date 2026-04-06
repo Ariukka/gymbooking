@@ -25,6 +25,9 @@ public class Gym {
     @Column(name = "phone")
     private String phone;
 
+    @Column(name = "capacity", nullable = false)
+    private Integer capacity;
+
     @ManyToOne
     @JoinColumn(name = "owner_user_id")
     @JsonIgnoreProperties({"gym", "password", "authorities"})
@@ -110,6 +113,14 @@ public class Gym {
 
     public void setPhone(String phone) {
         this.phone = phone;
+    }
+
+    public Integer getCapacity() {
+        return capacity;
+    }
+
+    public void setCapacity(Integer capacity) {
+        this.capacity = capacity;
     }
 
     public User getOwnerUser() {
