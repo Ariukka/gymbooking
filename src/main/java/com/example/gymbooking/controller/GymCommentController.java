@@ -14,7 +14,6 @@ import java.util.List;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/gyms/{gymId}/comments")
 @CrossOrigin(origins = "http://localhost:3000")
 public class GymCommentController {
 
@@ -26,7 +25,7 @@ public class GymCommentController {
         this.gymRepository = gymRepository;
     }
 
-    @GetMapping
+    @GetMapping({"/api/gyms/{gymId}/comments", "/gyms/{gymId}/comments"})
     public ResponseEntity<?> getGymComments(@PathVariable Long gymId) {
         if (!gymRepository.existsById(gymId)) {
             return ResponseEntity.notFound().build();
@@ -36,10 +35,46 @@ public class GymCommentController {
         return ResponseEntity.ok(comments);
     }
 
-    @PostMapping
-    public ResponseEntity<?> addComment(@PathVariable Long gymId,
-                                        @AuthenticationPrincipal User user,
+    @PostMapping({"/api/gyms/{gymId}/comments", "/gyms/{gymId}/comments"})
+    public ResponseEntity<?> addCommentByGym(@PathVariable Long gymId,
+                                             @AuthenticationPrincipal User user,
+                                             @RequestBody Map<String, String> payload) {
+        return createComment(gymId, user, payload);
+    }
+
+    @PostMapping("/api/comments")
+    public ResponseEntity<?> addComment(@AuthenticationPrincipal User user,
                                         @RequestBody Map<String, String> payload) {
+        Long gymId = parseGymId(payload.get("gymId"));
+        if (gymId == null) {
+            return ResponseEntity.badRequest().body(Map.of("error", "gymId is required"));
+        }
+        return createComment(gymId, user, payload);
+    }
+
+    @DeleteMapping({"/api/gyms/{gymId}/comments/{commentId}", "/gyms/{gymId}/comments/{commentId}"})
+    public ResponseEntity<?> deleteOwnComment(@PathVariable Long gymId,
+                                              @PathVariable Long commentId,
+                                              @AuthenticationPrincipal User user) {
+        if (user == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("error", "Authentication required"));
+        }
+
+        GymComment comment = gymCommentRepository.findByIdAndGymId(commentId, gymId).orElse(null);
+        if (comment == null) {
+            return ResponseEntity.notFound().build();
+        }
+
+        if (!comment.getUser().getId().equals(user.getId())) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(Map.of("error", "You can only delete your own comment"));
+        }
+
+        gymCommentRepository.delete(comment);
+        return ResponseEntity.ok(Map.of("message", "Comment deleted successfully"));
+    }
+
+    private ResponseEntity<?> createComment(Long gymId, User user, Map<String, String> payload) {
         if (user == null) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("error", "Authentication required"));
         }
@@ -63,25 +98,14 @@ public class GymCommentController {
         return ResponseEntity.ok(savedComment);
     }
 
-    @DeleteMapping("/{commentId}")
-    public ResponseEntity<?> deleteOwnComment(@PathVariable Long gymId,
-                                              @PathVariable Long commentId,
-                                              @AuthenticationPrincipal User user) {
-        if (user == null) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("error", "Authentication required"));
+    private Long parseGymId(String rawGymId) {
+        if (rawGymId == null || rawGymId.isBlank()) {
+            return null;
         }
-
-        GymComment comment = gymCommentRepository.findByIdAndGymId(commentId, gymId).orElse(null);
-        if (comment == null) {
-            return ResponseEntity.notFound().build();
+        try {
+            return Long.parseLong(rawGymId);
+        } catch (NumberFormatException ex) {
+            return null;
         }
-
-        if (!comment.getUser().getId().equals(user.getId())) {
-            return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                    .body(Map.of("error", "You can only delete your own comment"));
-        }
-
-        gymCommentRepository.delete(comment);
-        return ResponseEntity.ok(Map.of("message", "Comment deleted successfully"));
     }
 }

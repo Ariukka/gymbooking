@@ -26,7 +26,7 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 @RestController
-@RequestMapping("/admin")
+@RequestMapping({"/api/admin", "/admin"})
 @CrossOrigin(origins = "http://localhost:3000")
 public class AdminController {
 

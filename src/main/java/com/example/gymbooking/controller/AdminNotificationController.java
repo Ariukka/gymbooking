@@ -2,6 +2,7 @@ package com.example.gymbooking.controller;
 
 import com.example.gymbooking.model.Notification;
 import com.example.gymbooking.repository.NotificationRepository;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -11,7 +12,7 @@ import java.util.Comparator;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/admin/notifications")
+@RequestMapping({"/api/admin/notifications", "/api/notifications/admin"})
 public class AdminNotificationController {
 
     private final NotificationRepository notificationRepository;
@@ -27,5 +28,10 @@ public class AdminNotificationController {
                 .sorted(Comparator.comparing(Notification::getCreatedAt).reversed())
                 .toList();
         return ResponseEntity.ok(notifications);
+    }
+
+    @PostMapping
+    public ResponseEntity<List<Notification>> getAllNotificationsForAdminPost() {
+        return getAllNotificationsForAdmin();
     }
 }
