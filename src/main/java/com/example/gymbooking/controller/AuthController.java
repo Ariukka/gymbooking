@@ -11,6 +11,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
@@ -20,7 +21,7 @@ import java.util.Optional;
 import java.util.Random;
 
 @RestController
-@RequestMapping("/auth")
+@RequestMapping({"/auth", "/api/auth"})
 @CrossOrigin(origins = "http://localhost:3000")
 public class AuthController {
 
@@ -51,6 +52,26 @@ public class AuthController {
         this.passwordEncoder = passwordEncoder;
         this.userRepository = userRepository;
         this.jwtUtil = jwtUtil;
+    }
+
+    @GetMapping("/me")
+    public ResponseEntity<?> getCurrentUser(@AuthenticationPrincipal User currentUser) {
+        if (currentUser == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of(
+                    "success", false,
+                    "message", "Unauthorized"
+            ));
+        }
+
+        return ResponseEntity.ok(Map.of(
+                "id", currentUser.getId(),
+                "username", currentUser.getUsername(),
+                "phone", currentUser.getPhone(),
+                "email", currentUser.getEmail(),
+                "firstName", currentUser.getFirstName(),
+                "lastName", currentUser.getLastName(),
+                "role", currentUser.getRole()
+        ));
     }
 
     // ==================== LOGIN ====================
@@ -825,7 +846,6 @@ return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         return ResponseEntity.ok(response);
     }
 }
-
 
 
 

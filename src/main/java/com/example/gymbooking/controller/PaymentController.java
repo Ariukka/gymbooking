@@ -17,7 +17,7 @@ import java.util.Map;
 import java.util.Objects;
 
 @RestController
-@RequestMapping("/api/payments")
+@RequestMapping({"/api/payments", "/api/payment", "/payment"})
 @CrossOrigin(origins = "http://localhost:3000")
 public class PaymentController {
 
@@ -159,14 +159,22 @@ public class PaymentController {
                 .orElse(ResponseEntity.notFound().build());
     }
 
-    @PostMapping
+    @PostMapping({"", "/create"})
     public ResponseEntity<?> createPayment(@RequestBody Map<String, Object> request) {
-        Long bookingId = ((Number) request.get("bookingId")).longValue();
+        Object bookingIdValue = request.getOrDefault("bookingId", request.get("booking_id"));
+        if (!(bookingIdValue instanceof Number bookingIdNumber)) {
+            return ResponseEntity.badRequest().body(Map.of("error", "bookingId is required"));
+        }
+        Long bookingId = bookingIdNumber.longValue();
         return bookingRepository.findById(bookingId)
                 .map(booking -> {
                     Payment payment = new Payment();
                     payment.setBooking(booking);
-                    payment.setAmount(new BigDecimal(request.get("amount").toString()));
+                    Object amountValue = request.get("amount");
+                    if (amountValue == null) {
+                        return ResponseEntity.badRequest().body(Map.of("error", "amount is required"));
+                    }
+                    payment.setAmount(new BigDecimal(amountValue.toString()));
                     payment.setPaymentMethod((String) request.get("paymentMethod"));
                     payment.setStatus("PENDING");
                     return ResponseEntity.ok(paymentRepository.save(payment));
