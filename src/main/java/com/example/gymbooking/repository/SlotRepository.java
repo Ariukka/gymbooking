@@ -7,12 +7,14 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 
 public interface SlotRepository extends JpaRepository<Slot, Long> {
     List<Slot> findByGymId(Long gymId);
     List<Slot> findByGym(Gym gym);
     List<Slot> findByGymAndDate(Gym gym, LocalDate date);
     List<Slot> findByGymIdAndDate(Long gymId, LocalDate date);
+    Optional<Slot> findByGymIdAndDateAndTime(Long gymId, LocalDate date, String time);
     List<Slot> findByGymAndAvailableTrue(Gym gym);
     List<Slot> findByGymIdAndAvailableTrue(Long gymId);
     long countByGym(Gym gym);
