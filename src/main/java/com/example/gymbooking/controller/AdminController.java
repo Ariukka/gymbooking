@@ -525,6 +525,23 @@ public class AdminController {
         return ResponseEntity.ok(stats);
     }
 
+    /**
+     * Dashboard card widgets-д шууд ашиглах нэг түвшний summary.
+     * Frontend дээр key нэр өөр байгаа тохиолдолд compatibility alias-уудыг давхар буцаана.
+     */
+    @GetMapping("/dashboard")
+    public ResponseEntity<Map<String, Object>> getDashboardSummary() {
+        Map<String, Object> summary = new HashMap<>(buildSystemUserSummary());
+
+        // Frontend compatibility aliases
+        summary.put("totalHalls", summary.get("totalGyms"));
+        summary.put("activeOrders", summary.get("activeBookings"));
+        summary.put("todayIncome", summary.get("todaysRevenue"));
+        summary.put("totalIncome", summary.get("totalRevenue"));
+
+        return ResponseEntity.ok(summary);
+    }
+
 
     private Map<String, Object> buildSystemUserSummary() {
         LocalDate today = LocalDate.now();
@@ -538,6 +555,12 @@ public class AdminController {
 
         BigDecimal todaysRevenue = paymentRepository.sumPaidAmountBetween(startOfToday, startOfTomorrow);
         BigDecimal totalRevenue = paymentRepository.sumPaidAmount();
+        if (todaysRevenue == null) {
+            todaysRevenue = BigDecimal.ZERO;
+        }
+        if (totalRevenue == null) {
+            totalRevenue = BigDecimal.ZERO;
+        }
 
         Map<String, Object> summary = new HashMap<>();
         summary.put("totalUsers", totalUsers);
