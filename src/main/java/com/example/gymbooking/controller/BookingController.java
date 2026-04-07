@@ -27,6 +27,7 @@ import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.time.temporal.ChronoUnit;
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 
@@ -116,7 +117,7 @@ public class BookingController {
         booking.setUser(currentUser);
         booking.setGym(slot.getGym());
         booking.setSlot(slot);
-        booking.setTotalPrice(request.getTotalPrice() != null ? request.getTotalPrice() : slot.getPrice());
+        booking.setTotalPrice(resolveTotalPrice(request, slot));
         booking.setStatus("CONFIRMED");
         booking.setApproved(true);
         booking.setConfirmedAt(LocalDateTime.now());
@@ -126,33 +127,8 @@ public class BookingController {
         slot.incrementBookings();
         slotRepository.save(slot);
 
-        if (savedBooking.getEmail() != null && savedBooking.getDate() != null && savedBooking.getTime() != null) {
-            emailService.sendBookingEmail(
-                    savedBooking.getEmail(),
-                    savedBooking.getDate().toString(),
-                    savedBooking.getTime()
-            );
-        }
-
-        notificationService.createNotification(
-                currentUser.getId(),
-                "✅ Захиалга баталгаажлаа",
-                String.format("Таны %s %s цагийн захиалга амжилттай баталгаажлаа.",
-                        savedBooking.getDate(), savedBooking.getTime())
-        );
-
-        List<User> admins = userRepository.findByRole("ADMIN");
-        for (User admin : admins) {
-            notificationService.createNotification(
-                    admin.getId(),
-                    "🆕 Шинэ захиалга",
-                    String.format("%s хэрэглэгч %s %s цагт \"%s\" заалд захиалга хийлээ.",
-                            currentUser.getUsername(),
-                            savedBooking.getDate(),
-                            savedBooking.getTime(),
-                            savedBooking.getGym() != null ? savedBooking.getGym().getName() : "")
-            );
-        }
+        safelySendBookingEmail(savedBooking);
+        safelyCreateBookingNotifications(currentUser, savedBooking);
 
         return ResponseEntity.ok(savedBooking);
     }
@@ -217,13 +193,63 @@ public class BookingController {
             newSlot.setGym(gym);
             newSlot.setDate(request.getDate());
             newSlot.setTime(normalizedTime);
-            newSlot.setPrice(request.getTotalPrice());
+            newSlot.setPrice(resolveTotalPrice(request, null));
             newSlot.setAvailable(true);
             newSlot.setMaxCapacity(1);
             newSlot.setCurrentBookings(0);
 
             return slotRepository.save(newSlot);
         });
+    }
+
+    private BigDecimal resolveTotalPrice(CreateBookingRequest request, Slot slot) {
+        if (request != null && request.getTotalPrice() != null) {
+            return request.getTotalPrice();
+        }
+        if (slot != null && slot.getPrice() != null) {
+            return slot.getPrice();
+        }
+        return BigDecimal.ZERO;
+    }
+
+    private void safelySendBookingEmail(Booking booking) {
+        try {
+            if (booking.getEmail() != null && booking.getDate() != null && booking.getTime() != null) {
+                emailService.sendBookingEmail(
+                        booking.getEmail(),
+                        booking.getDate().toString(),
+                        booking.getTime()
+                );
+            }
+        } catch (RuntimeException ignored) {
+            // Non-critical failure should not block booking creation.
+        }
+    }
+
+    private void safelyCreateBookingNotifications(User currentUser, Booking savedBooking) {
+        try {
+            notificationService.createNotification(
+                    currentUser.getId(),
+                    "✅ Захиалга баталгаажлаа",
+                    String.format("Таны %s %s цагийн захиалга амжилттай баталгаажлаа.",
+                            savedBooking.getDate(), savedBooking.getTime())
+            );
+
+            List<User> admins = userRepository.findByRole("ADMIN");
+            for (User admin : admins) {
+                notificationService.createNotification(
+                        admin.getId(),
+                        "🆕 Шинэ захиалга",
+                        String.format("%s хэрэглэгч %s %s цагт \"%s\" заалд захиалга хийлээ.",
+                                currentUser.getUsername(),
+                                savedBooking.getDate(),
+                                savedBooking.getTime(),
+                                savedBooking.getGym() != null ? savedBooking.getGym().getName() : "")
+                );
+            }
+        } catch (RuntimeException ignored) {
+            // Non-critical failure should not block booking creation.
+        }
     }
 
     private String normalizeTime(String time) {
