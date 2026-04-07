@@ -3,6 +3,7 @@ package com.example.gymbooking.config;
 import com.example.gymbooking.model.Gym;
 import com.example.gymbooking.model.User;
 import com.example.gymbooking.repository.UserRepository;
+import com.example.gymbooking.service.DatabaseMaintenanceService;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
@@ -16,18 +17,24 @@ public class GymAdminSeeder implements CommandLineRunner {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final DatabaseMaintenanceService databaseMaintenanceService;
 
     @PersistenceContext
     private EntityManager entityManager;
 
-    public GymAdminSeeder(UserRepository userRepository, PasswordEncoder passwordEncoder) {
+    public GymAdminSeeder(UserRepository userRepository,
+                          PasswordEncoder passwordEncoder,
+                          DatabaseMaintenanceService databaseMaintenanceService) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
+        this.databaseMaintenanceService = databaseMaintenanceService;
     }
 
     @Override
     public void run(String... args) {
         try {
+            databaseMaintenanceService.fixAutoIncrementSequences();
+
             // NOTE: We intentionally fetch only IDs to avoid issues if some gyms contain invalid data
             // in other columns (e.g., malformed decimal strings in hourly_price).
             List<Long> gymIds = entityManager.createNativeQuery("select id from gyms", Long.class).getResultList();
@@ -67,4 +74,3 @@ public class GymAdminSeeder implements CommandLineRunner {
         }
     }
 }
-
