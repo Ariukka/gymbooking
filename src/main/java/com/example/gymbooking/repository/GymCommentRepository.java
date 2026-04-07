@@ -9,4 +9,5 @@ import java.util.Optional;
 public interface GymCommentRepository extends JpaRepository<GymComment, Long> {
     List<GymComment> findByGymIdOrderByCreatedAtDesc(Long gymId);
     Optional<GymComment> findByIdAndGymId(Long id, Long gymId);
+    Optional<GymComment> findByIdAndUserId(Long id, Long userId);
 }

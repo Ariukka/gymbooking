@@ -74,6 +74,23 @@ public class GymCommentController {
         return ResponseEntity.ok(Map.of("message", "Comment deleted successfully"));
     }
 
+    @DeleteMapping("/api/comments/{commentId}")
+    public ResponseEntity<?> deleteOwnComment(@PathVariable Long commentId,
+                                              @AuthenticationPrincipal User user) {
+        if (user == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("error", "Authentication required"));
+        }
+
+        GymComment comment = gymCommentRepository.findByIdAndUserId(commentId, user.getId()).orElse(null);
+        if (comment == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(Map.of("error", "Comment not found or not owned by user"));
+        }
+
+        gymCommentRepository.delete(comment);
+        return ResponseEntity.ok(Map.of("message", "Comment deleted successfully"));
+    }
+
     private ResponseEntity<?> createComment(Long gymId, User user, Map<String, String> payload) {
         if (user == null) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("error", "Authentication required"));
