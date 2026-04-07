@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.Comparator;
 import java.util.List;
+import java.util.Objects;
 
 @RestController
 @RequestMapping({"/api/admin/notifications", "/api/notifications/admin"})
@@ -25,7 +26,11 @@ public class AdminNotificationController {
     public ResponseEntity<List<Notification>> getAllNotificationsForAdmin() {
         List<Notification> notifications = notificationRepository.findAll()
                 .stream()
-                .sorted(Comparator.comparing(Notification::getCreatedAt).reversed())
+                .filter(Objects::nonNull)
+                .sorted(Comparator.comparing(
+                        Notification::getCreatedAt,
+                        Comparator.nullsLast(Comparator.naturalOrder()))
+                        .reversed())
                 .toList();
         return ResponseEntity.ok(notifications);
     }

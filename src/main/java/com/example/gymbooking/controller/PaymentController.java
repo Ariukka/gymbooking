@@ -17,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.math.BigDecimal;
 
 @RestController
 @RequestMapping({"/api/payments", "/api/payment", "/payment"})
@@ -169,9 +170,20 @@ public class PaymentController {
         Long bookingId = request.resolveBookingId();
         return bookingRepository.findById(bookingId)
                 .map(booking -> {
+                    BigDecimal resolvedAmount = request.getAmount() != null
+                            ? request.getAmount()
+                            : booking.getTotalPrice();
+
+                    if (resolvedAmount == null || resolvedAmount.compareTo(BigDecimal.ZERO) <= 0) {
+                        return ResponseEntity.badRequest().body(Map.of(
+                                "error", "amount is required",
+                                "message", "Provide amount (or ensure booking has a valid totalPrice)."
+                        ));
+                    }
+
                     Payment payment = new Payment();
                     payment.setBooking(booking);
-                    payment.setAmount(request.getAmount());
+                    payment.setAmount(resolvedAmount);
                     payment.setPaymentMethod(
                             request.getPaymentMethod() == null || request.getPaymentMethod().isBlank()
                                     ? "QPAY"
