@@ -7,6 +7,7 @@ import com.example.gymbooking.repository.PaymentRepository;
 import com.example.gymbooking.repository.SlotRepository;
 import com.example.gymbooking.service.NotificationService;
 import com.example.gymbooking.service.QPayService;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,17 +27,20 @@ public class PaymentController {
     private final QPayService qPayService;
     private final NotificationService notificationService;
     private final SlotRepository slotRepository;
+    private final boolean paymentRequired;
 
     public PaymentController(PaymentRepository paymentRepository,
                              BookingRepository bookingRepository,
                              QPayService qPayService,
                              NotificationService notificationService,
-                             SlotRepository slotRepository) {
+                             SlotRepository slotRepository,
+                             @Value("${app.payment.required:true}") boolean paymentRequired) {
         this.paymentRepository = paymentRepository;
         this.bookingRepository = bookingRepository;
         this.qPayService = qPayService;
         this.notificationService = notificationService;
         this.slotRepository = slotRepository;
+        this.paymentRequired = paymentRequired;
     }
 
     // ========================
@@ -176,6 +180,24 @@ public class PaymentController {
                     }
                     payment.setAmount(new BigDecimal(amountValue.toString()));
                     payment.setPaymentMethod((String) request.get("paymentMethod"));
+
+                    if (!paymentRequired) {
+                        payment.setStatus("PAID");
+                        payment.setTransactionId("TEST-BYPASS-" + booking.getId());
+                        Payment saved = paymentRepository.save(payment);
+
+                        booking.setStatus("CONFIRMED");
+                        booking.setApproved(true);
+                        bookingRepository.save(booking);
+                        lockSlotForBooking(booking);
+                        notificationService.createPaymentSuccessNotification(saved);
+
+                        return ResponseEntity.ok(Map.of(
+                                "payment", saved,
+                                "message", "Test mode: payment bypassed and booking confirmed."
+                        ));
+                    }
+
                     payment.setStatus("PENDING");
                     return ResponseEntity.ok(paymentRepository.save(payment));
                 })
