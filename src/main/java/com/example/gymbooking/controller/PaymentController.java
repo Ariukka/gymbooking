@@ -162,10 +162,10 @@ public class PaymentController {
     @PostMapping({"", "/create"})
     public ResponseEntity<?> createPayment(@RequestBody Map<String, Object> request) {
         Object bookingIdValue = request.getOrDefault("bookingId", request.get("booking_id"));
-        if (!(bookingIdValue instanceof Number bookingIdNumber)) {
+        Long bookingId = parseLong(bookingIdValue);
+        if (bookingId == null) {
             return ResponseEntity.badRequest().body(Map.of("error", "bookingId is required"));
         }
-        Long bookingId = bookingIdNumber.longValue();
         return bookingRepository.findById(bookingId)
                 .map(booking -> {
                     Payment payment = new Payment();
@@ -180,6 +180,24 @@ public class PaymentController {
                     return ResponseEntity.ok(paymentRepository.save(payment));
                 })
                 .orElse(ResponseEntity.badRequest().build());
+    }
+
+    private Long parseLong(Object value) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof Number number) {
+            return number.longValue();
+        }
+        String candidate = value.toString().trim();
+        if (candidate.isBlank()) {
+            return null;
+        }
+        try {
+            return Long.parseLong(candidate);
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
     }
 
     @PutMapping("/{id}/status")
