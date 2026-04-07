@@ -13,15 +13,20 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.transaction.annotation.Transactional;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.math.BigDecimal;
 
 @RestController
 @RequestMapping({"/api/payments", "/api/payment", "/payment"})
 @CrossOrigin(origins = "http://localhost:3000")
 public class PaymentController {
+
+    private static final Logger log = LoggerFactory.getLogger(PaymentController.class);
 
     private final PaymentRepository paymentRepository;
     private final BookingRepository bookingRepository;
@@ -166,12 +171,36 @@ public class PaymentController {
 
     @PostMapping({"", "/create"})
     public ResponseEntity<?> createPayment(@Valid @RequestBody CreatePaymentRequest request) {
+        log.info("/payments/create payload: bookingId={}, amount={}, paymentMethod={}, userId={}",
+                request.resolveBookingId(),
+                request.getAmount(),
+                request.getPaymentMethod(),
+                request.getUserId());
+
         Long bookingId = request.resolveBookingId();
+        if (bookingId == null) {
+            log.warn("/payments/create rejected: bookingId is missing");
+            return ResponseEntity.badRequest().body(Map.of("error", "bookingId is required"));
+        }
+
         return bookingRepository.findById(bookingId)
                 .map(booking -> {
+                    BigDecimal resolvedAmount = request.getAmount() != null
+                            ? request.getAmount()
+                            : booking.getTotalPrice();
+
+                    if (resolvedAmount == null || resolvedAmount.compareTo(BigDecimal.ZERO) <= 0) {
+                        log.warn("/payments/create rejected: invalid amount. requestAmount={}, bookingTotalPrice={}, bookingId={}",
+                                request.getAmount(), booking.getTotalPrice(), booking.getId());
+                        return ResponseEntity.badRequest().body(Map.of(
+                                "error", "amount is required",
+                                "message", "Provide amount (or ensure booking has a valid totalPrice)."
+                        ));
+                    }
+
                     Payment payment = new Payment();
                     payment.setBooking(booking);
-                    payment.setAmount(request.getAmount());
+                    payment.setAmount(resolvedAmount);
                     payment.setPaymentMethod(
                             request.getPaymentMethod() == null || request.getPaymentMethod().isBlank()
                                     ? "QPAY"
@@ -182,6 +211,7 @@ public class PaymentController {
                         payment.setUserId(request.getUserId());
                     }
                     if (payment.getUserId() == null) {
+                        log.warn("/payments/create rejected: userId unresolved for bookingId={}", booking.getId());
                         return ResponseEntity.badRequest().body(Map.of("error", "userId is required"));
                     }
 
@@ -203,9 +233,14 @@ public class PaymentController {
                     }
 
                     payment.setStatus("PENDING");
+                    log.info("/payments/create accepted: bookingId={}, amount={}, paymentMethod={}, userId={}",
+                            booking.getId(), payment.getAmount(), payment.getPaymentMethod(), payment.getUserId());
                     return ResponseEntity.ok(paymentRepository.save(payment));
                 })
-                .orElse(ResponseEntity.badRequest().build());
+                .orElseGet(() -> {
+                    log.warn("/payments/create rejected: booking not found. bookingId={}", bookingId);
+                    return ResponseEntity.badRequest().body(Map.of("error", "booking not found"));
+                });
     }
 
     @PutMapping("/{id}/status")
