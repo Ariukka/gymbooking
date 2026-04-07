@@ -3,6 +3,8 @@ package com.example.gymbooking.exception;
 import com.example.gymbooking.dto.appointment.ErrorResponseDto;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -30,6 +32,17 @@ public class GlobalExceptionHandler {
                 .orElse("Validation failed");
 
         return buildError(HttpStatus.BAD_REQUEST, message);
+    }
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ErrorResponseDto> handleUnreadableBody(HttpMessageNotReadableException ex) {
+        return buildError(HttpStatus.BAD_REQUEST,
+                "Invalid request payload. Please check field formats (e.g. date should be yyyy-MM-dd).");
+    }
+
+    @ExceptionHandler({IllegalArgumentException.class, DataIntegrityViolationException.class})
+    public ResponseEntity<ErrorResponseDto> handleBadRequest(Exception ex) {
+        return buildError(HttpStatus.BAD_REQUEST, ex.getMessage());
     }
 
     @ExceptionHandler(Exception.class)
