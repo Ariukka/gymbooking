@@ -16,6 +16,8 @@ public class CreateBookingRequest {
     private LocalDate date;
     @JsonAlias({"slotTime", "startTime", "time"})
     private String time;
+    @JsonAlias({"endTime", "toTime"})
+    private String endTime;
     @JsonAlias({"price", "amount"})
     private BigDecimal totalPrice;
 
@@ -49,6 +51,14 @@ public class CreateBookingRequest {
 
     public void setTime(String time) {
         this.time = time;
+    }
+
+    public String getEndTime() {
+        return endTime;
+    }
+
+    public void setEndTime(String endTime) {
+        this.endTime = endTime;
     }
 
     public BigDecimal getTotalPrice() {

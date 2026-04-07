@@ -101,10 +101,13 @@ public class BookingController {
             ));
         }
 
-        boolean alreadyBooked = bookingRepository.existsBySlot_IdAndStatusIn(
-                slot.getId(), List.of("PENDING", "CONFIRMED"));
-        if (alreadyBooked) {
-            return ResponseEntity.badRequest().body(Map.of("error", "Slot already booked"));
+        boolean alreadyBookedByUser = bookingRepository.existsByUser_IdAndSlot_IdAndStatusIn(
+                currentUser.getId(), slot.getId(), List.of("PENDING", "CONFIRMED"));
+        if (alreadyBookedByUser) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "error", "Duplicate booking",
+                    "message", "Та энэ цаг дээр өмнө нь захиалга хийсэн байна."
+            ));
         }
 
         Booking booking = new Booking();
@@ -184,7 +187,7 @@ public class BookingController {
             return null;
         }
 
-        String normalizedTime = normalizeTime(request.getTime());
+        String normalizedTime = mergeAndNormalizeTimeRange(request.getTime(), request.getEndTime());
 
         if (request.getSlotId() != null) {
             return slotRepository.findById(request.getSlotId()).orElse(null);
@@ -237,6 +240,29 @@ public class BookingController {
         }
 
         return normalizeSingleTime(candidate);
+    }
+
+    private String mergeAndNormalizeTimeRange(String startTime, String endTime) {
+        String normalizedStart = normalizeTime(startTime);
+        String normalizedEnd = normalizeTime(endTime);
+
+        if (normalizedStart == null || normalizedStart.isBlank()) {
+            return normalizedStart;
+        }
+
+        if (normalizedStart.contains("-")) {
+            return normalizedStart;
+        }
+
+        if (normalizedEnd == null || normalizedEnd.isBlank()) {
+            return normalizedStart;
+        }
+
+        if (normalizedEnd.contains("-")) {
+            normalizedEnd = normalizedEnd.split("-", 2)[0];
+        }
+
+        return normalizedStart + "-" + normalizedEnd;
     }
 
     private String normalizeSingleTime(String candidate) {

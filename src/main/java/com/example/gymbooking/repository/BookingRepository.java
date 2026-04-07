@@ -16,6 +16,7 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
     List<Booking> findByGymAndStatus(Gym gym, String status);
     List<Booking> findByGymAndApprovedTrue(Gym gym);
     boolean existsBySlot_IdAndStatusIn(Long slotId, List<String> statuses);
+    boolean existsByUser_IdAndSlot_IdAndStatusIn(Long userId, Long slotId, List<String> statuses);
     List<Booking> findByGym_IdAndSlot_Date(Long gymId, LocalDate date);
     long countByGym(Gym gym);
     long countByGymAndStatus(Gym gym, String status);
