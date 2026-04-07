@@ -1,9 +1,9 @@
 package com.example.gymbooking.dto;
 
 import com.fasterxml.jackson.annotation.JsonAlias;
+import com.fasterxml.jackson.annotation.JsonSetter;
+import com.fasterxml.jackson.databind.JsonNode;
 import jakarta.validation.constraints.AssertTrue;
-import jakarta.validation.constraints.DecimalMin;
-import jakarta.validation.constraints.NotNull;
 
 import java.math.BigDecimal;
 
@@ -15,8 +15,7 @@ public class CreatePaymentRequest {
     @JsonAlias("booking")
     private BookingReference booking;
 
-    @NotNull(message = "amount is required")
-    @DecimalMin(value = "0.01", message = "amount must be greater than 0")
+    @JsonAlias({"amount", "totalPrice", "total_price", "price"})
     private BigDecimal amount;
 
     @JsonAlias({"paymentMethod", "payment_method"})
@@ -51,6 +50,29 @@ public class CreatePaymentRequest {
 
     public void setBooking(BookingReference booking) {
         this.booking = booking;
+    }
+
+    @JsonSetter("booking")
+    public void setBookingFromJson(JsonNode bookingNode) {
+        if (bookingNode == null || bookingNode.isNull()) {
+            return;
+        }
+
+        if (bookingNode.isNumber() || bookingNode.isTextual()) {
+            try {
+                this.bookingId = Long.parseLong(bookingNode.asText());
+            } catch (NumberFormatException ignored) {
+                // Leave bookingId unchanged so validation can return a clean error.
+            }
+            return;
+        }
+
+        if (bookingNode.isObject()) {
+            JsonNode idNode = bookingNode.get("id");
+            if (idNode != null && !idNode.isNull()) {
+                this.bookingId = idNode.asLong();
+            }
+        }
     }
 
     public BigDecimal getAmount() {

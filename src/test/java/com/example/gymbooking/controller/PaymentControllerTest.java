@@ -102,4 +102,27 @@ class PaymentControllerTest {
         assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
         assertEquals(java.util.Map.of("error", "userId is required"), response.getBody());
     }
+
+    @Test
+    void createPayment_shouldUseBookingTotalPriceWhenAmountMissing() {
+        booking.setTotalPrice(new BigDecimal("9900.00"));
+
+        when(bookingRepository.findById(10L)).thenReturn(Optional.of(booking));
+        when(paymentRepository.save(org.mockito.ArgumentMatchers.any(Payment.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        CreatePaymentRequest request = new CreatePaymentRequest();
+        request.setBookingId(10L);
+
+        ResponseEntity<?> response = paymentController.createPayment(request);
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertTrue(response.getBody() instanceof Payment);
+
+        Payment saved = (Payment) response.getBody();
+        assertEquals(new BigDecimal("9900.00"), saved.getAmount());
+        assertEquals("QPAY", saved.getPaymentMethod());
+        assertEquals(77L, saved.getUserId());
+        assertEquals("PENDING", saved.getStatus());
+    }
 }
