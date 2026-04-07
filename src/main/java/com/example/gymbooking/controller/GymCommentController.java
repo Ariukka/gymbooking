@@ -35,6 +35,15 @@ public class GymCommentController {
         return ResponseEntity.ok(comments);
     }
 
+    @GetMapping("/api/comments")
+    public ResponseEntity<?> getGymCommentsByQuery(@RequestParam(name = "gymId", required = false) String rawGymId) {
+        Long gymId = parseGymId(rawGymId);
+        if (gymId == null) {
+            return ResponseEntity.badRequest().body(Map.of("error", "gymId is required"));
+        }
+        return getGymComments(gymId);
+    }
+
     @PostMapping({"/api/gyms/{gymId}/comments", "/gyms/{gymId}/comments"})
     public ResponseEntity<?> addCommentByGym(@PathVariable Long gymId,
                                              @AuthenticationPrincipal User user,

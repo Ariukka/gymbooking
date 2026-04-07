@@ -90,6 +90,30 @@ class GymCommentControllerTest {
     }
 
     @Test
+    void getGymCommentsByQuery_shouldReturnCommentsWhenGymIdIsValid() {
+        GymComment comment = new GymComment();
+        comment.setComment("Nice place");
+        comment.setGym(gym);
+        comment.setUser(user);
+
+        when(gymRepository.existsById(1L)).thenReturn(true);
+        when(gymCommentRepository.findByGymIdOrderByCreatedAtDesc(1L)).thenReturn(List.of(comment));
+
+        ResponseEntity<?> response = gymCommentController.getGymCommentsByQuery("1");
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertEquals(List.of(comment), response.getBody());
+    }
+
+    @Test
+    void getGymCommentsByQuery_shouldReturnBadRequestWhenGymIdMissing() {
+        ResponseEntity<?> response = gymCommentController.getGymCommentsByQuery(null);
+
+        assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+        assertEquals(Map.of("error", "gymId is required"), response.getBody());
+    }
+
+    @Test
     void deleteOwnCommentByCommentId_shouldDeleteWhenOwnedByUser() {
         GymComment comment = new GymComment();
         comment.setId(11L);
