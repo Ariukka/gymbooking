@@ -15,11 +15,13 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
@@ -161,6 +163,11 @@ public class BookingController {
             return ResponseEntity.status(401).body(Map.of("error", "Unauthorized"));
         }
         return ResponseEntity.ok(bookingRepository.findByUser_IdOrderByCreatedAtDesc(currentUser.getId()));
+    }
+
+    @GetMapping("/{date}")
+    public ResponseEntity<?> getBookingsByDate(@PathVariable LocalDate date) {
+        return ResponseEntity.ok(bookingRepository.findBySlot_Date(date));
     }
 
     private String validateRequest(CreateBookingRequest request) {

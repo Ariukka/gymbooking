@@ -1,5 +1,6 @@
 package com.example.gymbooking.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -15,14 +16,17 @@ public class Booking {
 
     @ManyToOne
     @JoinColumn(name = "user_id")
+    @JsonIgnoreProperties({"password", "authorities", "gym"})
     private User user;
 
     @ManyToOne
     @JoinColumn(name = "gym_id")
+    @JsonIgnoreProperties({"ownerUser", "slots", "bookings", "comments"})
     private Gym gym;
 
     @ManyToOne
     @JoinColumn(name = "slot_id")
+    @JsonIgnoreProperties({"gym"})
     private Slot slot;
 
     @Column(name = "total_price", precision = 12, scale = 2)
@@ -34,6 +38,7 @@ public class Booking {
     private boolean approved = false;
 
     @OneToOne(mappedBy = "booking", cascade = CascadeType.ALL)
+    @JsonIgnoreProperties({"booking"})
     private Payment payment;
 
     @Column(name = "created_at")
