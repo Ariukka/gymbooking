@@ -29,7 +29,9 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers("/api/auth/**", "/auth/**", "/api/appointments/**").permitAll()
-                        .requestMatchers("/api/admin/**", "/api/notifications/admin/**").hasAnyRole("ADMIN", "SUPER_ADMIN")
+                        .requestMatchers("/api/admin/notifications/**", "/api/notifications/admin/**")
+                        .hasAnyRole("ADMIN", "SUPER_ADMIN", "GYM_ADMIN")
+                        .requestMatchers("/api/admin/**").hasAnyRole("ADMIN", "SUPER_ADMIN")
                         .requestMatchers("/api/bookings/**", "/api/comments/**", "/api/gyms/*/comments/**").authenticated()
                         .requestMatchers("/error").permitAll()
                         .anyRequest().authenticated()
