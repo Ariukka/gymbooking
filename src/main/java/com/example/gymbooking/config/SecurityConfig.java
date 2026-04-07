@@ -29,7 +29,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers("/api/auth/**", "/auth/**").permitAll()
-                        .requestMatchers("/api/admin/**", "/api/notifications/admin/**").hasRole("ADMIN")
+                        .requestMatchers("/api/admin/**", "/api/notifications/admin/**").hasAnyRole("ADMIN", "SUPER_ADMIN")
                         .requestMatchers("/api/bookings/**", "/api/comments/**", "/api/gyms/*/comments/**").authenticated()
                         .requestMatchers("/error").permitAll()
                         .anyRequest().authenticated()
