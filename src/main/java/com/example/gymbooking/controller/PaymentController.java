@@ -165,7 +165,7 @@ public class PaymentController {
 
     @PostMapping({"", "/create"})
     public ResponseEntity<?> createPayment(@RequestBody Map<String, Object> request) {
-        Object bookingIdValue = request.getOrDefault("bookingId", request.get("booking_id"));
+        Object bookingIdValue = resolveBookingId(request);
         Long bookingId = parseLong(bookingIdValue);
         if (bookingId == null) {
             return ResponseEntity.badRequest().body(Map.of("error", "bookingId is required"));
@@ -179,7 +179,17 @@ public class PaymentController {
                         return ResponseEntity.badRequest().body(Map.of("error", "amount is required"));
                     }
                     payment.setAmount(new BigDecimal(amountValue.toString()));
-                    payment.setPaymentMethod((String) request.get("paymentMethod"));
+                    payment.setPaymentMethod(Objects.toString(
+                            request.getOrDefault("paymentMethod", request.get("payment_method")),
+                            "QPAY"));
+                    if (booking.getUser() != null && booking.getUser().getId() != null) {
+                        payment.setUserId(booking.getUser().getId());
+                    } else {
+                        payment.setUserId(parseLong(request.getOrDefault("userId", request.get("user_id"))));
+                    }
+                    if (payment.getUserId() == null) {
+                        return ResponseEntity.badRequest().body(Map.of("error", "userId is required"));
+                    }
 
                     if (!paymentRequired) {
                         payment.setStatus("PAID");
@@ -202,6 +212,18 @@ public class PaymentController {
                     return ResponseEntity.ok(paymentRepository.save(payment));
                 })
                 .orElse(ResponseEntity.badRequest().build());
+    }
+
+    private Object resolveBookingId(Map<String, Object> request) {
+        Object bookingIdValue = request.getOrDefault("bookingId", request.get("booking_id"));
+        if (bookingIdValue != null) {
+            return bookingIdValue;
+        }
+        Object bookingValue = request.get("booking");
+        if (bookingValue instanceof Map<?, ?> bookingMap) {
+            return bookingMap.get("id");
+        }
+        return null;
     }
 
     private Long parseLong(Object value) {
