@@ -1,5 +1,6 @@
 package com.example.gymbooking.controller;
 
+import com.example.gymbooking.dto.CreatePaymentRequest;
 import com.example.gymbooking.model.Payment;
 import com.example.gymbooking.model.Booking;
 import com.example.gymbooking.repository.BookingRepository;
@@ -7,12 +8,12 @@ import com.example.gymbooking.repository.PaymentRepository;
 import com.example.gymbooking.repository.SlotRepository;
 import com.example.gymbooking.service.NotificationService;
 import com.example.gymbooking.service.QPayService;
+import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -164,28 +165,21 @@ public class PaymentController {
     }
 
     @PostMapping({"", "/create"})
-    public ResponseEntity<?> createPayment(@RequestBody Map<String, Object> request) {
-        Object bookingIdValue = resolveBookingId(request);
-        Long bookingId = parseLong(bookingIdValue);
-        if (bookingId == null) {
-            return ResponseEntity.badRequest().body(Map.of("error", "bookingId is required"));
-        }
+    public ResponseEntity<?> createPayment(@Valid @RequestBody CreatePaymentRequest request) {
+        Long bookingId = request.resolveBookingId();
         return bookingRepository.findById(bookingId)
                 .map(booking -> {
                     Payment payment = new Payment();
                     payment.setBooking(booking);
-                    Object amountValue = request.get("amount");
-                    if (amountValue == null) {
-                        return ResponseEntity.badRequest().body(Map.of("error", "amount is required"));
-                    }
-                    payment.setAmount(new BigDecimal(amountValue.toString()));
-                    payment.setPaymentMethod(Objects.toString(
-                            request.getOrDefault("paymentMethod", request.get("payment_method")),
-                            "QPAY"));
+                    payment.setAmount(request.getAmount());
+                    payment.setPaymentMethod(
+                            request.getPaymentMethod() == null || request.getPaymentMethod().isBlank()
+                                    ? "QPAY"
+                                    : request.getPaymentMethod());
                     if (booking.getUser() != null && booking.getUser().getId() != null) {
                         payment.setUserId(booking.getUser().getId());
                     } else {
-                        payment.setUserId(parseLong(request.getOrDefault("userId", request.get("user_id"))));
+                        payment.setUserId(request.getUserId());
                     }
                     if (payment.getUserId() == null) {
                         return ResponseEntity.badRequest().body(Map.of("error", "userId is required"));
@@ -212,36 +206,6 @@ public class PaymentController {
                     return ResponseEntity.ok(paymentRepository.save(payment));
                 })
                 .orElse(ResponseEntity.badRequest().build());
-    }
-
-    private Object resolveBookingId(Map<String, Object> request) {
-        Object bookingIdValue = request.getOrDefault("bookingId", request.get("booking_id"));
-        if (bookingIdValue != null) {
-            return bookingIdValue;
-        }
-        Object bookingValue = request.get("booking");
-        if (bookingValue instanceof Map<?, ?> bookingMap) {
-            return bookingMap.get("id");
-        }
-        return null;
-    }
-
-    private Long parseLong(Object value) {
-        if (value == null) {
-            return null;
-        }
-        if (value instanceof Number number) {
-            return number.longValue();
-        }
-        String candidate = value.toString().trim();
-        if (candidate.isBlank()) {
-            return null;
-        }
-        try {
-            return Long.parseLong(candidate);
-        } catch (NumberFormatException ignored) {
-            return null;
-        }
     }
 
     @PutMapping("/{id}/status")

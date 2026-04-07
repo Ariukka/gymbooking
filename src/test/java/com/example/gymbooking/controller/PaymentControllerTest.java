@@ -1,5 +1,6 @@
 package com.example.gymbooking.controller;
 
+import com.example.gymbooking.dto.CreatePaymentRequest;
 import com.example.gymbooking.model.Booking;
 import com.example.gymbooking.model.Payment;
 import com.example.gymbooking.model.User;
@@ -17,7 +18,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 
 import java.math.BigDecimal;
-import java.util.Map;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -67,11 +67,14 @@ class PaymentControllerTest {
         when(paymentRepository.save(org.mockito.ArgumentMatchers.any(Payment.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
-        ResponseEntity<?> response = paymentController.createPayment(Map.of(
-                "booking", Map.of("id", 10L),
-                "amount", "12000.00",
-                "payment_method", "CARD"
-        ));
+        CreatePaymentRequest request = new CreatePaymentRequest();
+        CreatePaymentRequest.BookingReference bookingReference = new CreatePaymentRequest.BookingReference();
+        bookingReference.setId(10L);
+        request.setBooking(bookingReference);
+        request.setAmount(new BigDecimal("12000.00"));
+        request.setPaymentMethod("CARD");
+
+        ResponseEntity<?> response = paymentController.createPayment(request);
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
         assertTrue(response.getBody() instanceof Payment);
@@ -90,12 +93,13 @@ class PaymentControllerTest {
 
         when(bookingRepository.findById(10L)).thenReturn(Optional.of(bookingWithoutUser));
 
-        ResponseEntity<?> response = paymentController.createPayment(Map.of(
-                "bookingId", 10L,
-                "amount", "15000"
-        ));
+        CreatePaymentRequest request = new CreatePaymentRequest();
+        request.setBookingId(10L);
+        request.setAmount(new BigDecimal("15000"));
+
+        ResponseEntity<?> response = paymentController.createPayment(request);
 
         assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
-        assertEquals(Map.of("error", "userId is required"), response.getBody());
+        assertEquals(java.util.Map.of("error", "userId is required"), response.getBody());
     }
 }
