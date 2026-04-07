@@ -5,9 +5,14 @@ import com.example.gymbooking.repository.SlotRepository;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDateTime;
 import java.time.LocalDate;
+import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/slots")
@@ -23,13 +28,16 @@ public class SlotController {
     // Get all slots
     @GetMapping
     public List<Slot> getAllSlots() {
-        return slotRepository.findAll();
+        return slotRepository.findAll().stream()
+                .map(this::toResponseSlot)
+                .collect(Collectors.toList());
     }
 
     // Get slot by ID
     @GetMapping("/{id}")
     public ResponseEntity<Slot> getSlotById(@PathVariable Long id) {
         return slotRepository.findById(id)
+                .map(this::toResponseSlot)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
     }
@@ -37,7 +45,9 @@ public class SlotController {
     // Get slots by gym ID
     @GetMapping("/gym/{gymId}")
     public ResponseEntity<List<Slot>> getSlotsByGym(@PathVariable Long gymId) {
-        List<Slot> slots = slotRepository.findByGymId(gymId);
+        List<Slot> slots = slotRepository.findByGymId(gymId).stream()
+                .map(this::toResponseSlot)
+                .collect(Collectors.toList());
         return ResponseEntity.ok(slots);
     }
 
@@ -47,7 +57,9 @@ public class SlotController {
                                                   @RequestParam String date) {
         try {
             LocalDate parsedDate = LocalDate.parse(date);
-            List<Slot> slots = slotRepository.findByGymIdAndDate(gymId, parsedDate);
+            List<Slot> slots = slotRepository.findByGymIdAndDate(gymId, parsedDate).stream()
+                    .map(this::toResponseSlot)
+                    .collect(Collectors.toList());
 
             Map<String, Object> response = Map.of(
                     "gymId", gymId,
@@ -65,7 +77,10 @@ public class SlotController {
     // Get available slots by gym ID
     @GetMapping("/gym/{gymId}/available")
     public ResponseEntity<List<Slot>> getAvailableSlotsByGym(@PathVariable Long gymId) {
-        List<Slot> slots = slotRepository.findByGymIdAndAvailableTrue(gymId);
+        List<Slot> slots = slotRepository.findByGymIdAndAvailableTrue(gymId).stream()
+                .map(this::toResponseSlot)
+                .filter(Slot::isAvailable)
+                .collect(Collectors.toList());
         return ResponseEntity.ok(slots);
     }
 
@@ -75,7 +90,10 @@ public class SlotController {
                                                            @RequestParam String date) {
         try {
             LocalDate parsedDate = LocalDate.parse(date);
-            List<Slot> slots = slotRepository.findByGymIdAndDateAndAvailable(gymId, parsedDate, true);
+            List<Slot> slots = slotRepository.findByGymIdAndDateAndAvailable(gymId, parsedDate, true).stream()
+                    .map(this::toResponseSlot)
+                    .filter(Slot::isAvailable)
+                    .collect(Collectors.toList());
 
             Map<String, Object> response = Map.of(
                     "gymId", gymId,
@@ -167,5 +185,56 @@ public class SlotController {
                 "message", "Slot deleted successfully",
                 "id", id
         ));
+    }
+
+    private Slot toResponseSlot(Slot originalSlot) {
+        Slot responseSlot = new Slot();
+        responseSlot.setId(originalSlot.getId());
+        responseSlot.setGym(originalSlot.getGym());
+        responseSlot.setDate(originalSlot.getDate());
+        responseSlot.setTime(originalSlot.getTime());
+        responseSlot.setPrice(originalSlot.getPrice());
+        responseSlot.setMaxCapacity(originalSlot.getMaxCapacity());
+        responseSlot.setCurrentBookings(originalSlot.getCurrentBookings());
+        responseSlot.setAvailable(originalSlot.isAvailable() && !isPastSlot(originalSlot));
+        return responseSlot;
+    }
+
+    private boolean isPastSlot(Slot slot) {
+        if (slot == null || slot.getDate() == null) {
+            return false;
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        if (slot.getDate().isBefore(now.toLocalDate())) {
+            return true;
+        }
+
+        if (!slot.getDate().isEqual(now.toLocalDate())) {
+            return false;
+        }
+
+        LocalTime slotStartTime = extractStartTime(slot.getTime());
+        if (slotStartTime == null) {
+            return false;
+        }
+
+        return !slotStartTime.isAfter(now.toLocalTime());
+    }
+
+    private LocalTime extractStartTime(String slotTimeRange) {
+        if (slotTimeRange == null || slotTimeRange.isBlank()) {
+            return null;
+        }
+
+        String startTime = slotTimeRange.contains("-")
+                ? slotTimeRange.split("-", 2)[0].trim()
+                : slotTimeRange.trim();
+
+        try {
+            return LocalTime.parse(startTime, DateTimeFormatter.ofPattern("H:mm"));
+        } catch (DateTimeParseException ignored) {
+            return null;
+        }
     }
 }
