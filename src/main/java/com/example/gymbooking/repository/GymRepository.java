@@ -11,8 +11,10 @@ public interface GymRepository extends JpaRepository<Gym, Long> {
     Optional<Gym> findFirstByOwnerUser(User ownerUser);
     List<Gym> findByApprovedTrue();
     List<Gym> findByApprovedTrueAndActiveTrue();
+    List<Gym> findByApprovedTrueAndActiveTrueOrderByIdAsc();
     List<Gym> findByApprovedFalse();
     List<Gym> findByApproved(boolean approved);
+    List<Gym> findByOwnerUserOrderByIdAsc(User ownerUser);
     long countByApprovedTrue();
     long countByApprovedFalse();
     boolean existsByOwnerUser(User ownerUser);

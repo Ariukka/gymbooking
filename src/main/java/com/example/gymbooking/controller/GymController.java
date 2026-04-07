@@ -33,7 +33,7 @@ public class GymController {
     // Get all approved gyms
     @GetMapping
     public List<Gym> getAllGyms() {
-        return gymRepository.findByApprovedTrueAndActiveTrue();
+        return gymRepository.findByApprovedTrueAndActiveTrueOrderByIdAsc();
     }
 
     // Get gym by ID
@@ -119,7 +119,7 @@ public class GymController {
     // Get gyms by owner
     @GetMapping("/my-gyms")
     public ResponseEntity<List<Gym>> getMyGyms(@AuthenticationPrincipal User user) {
-        List<Gym> gyms = gymRepository.findByOwnerUser(user);
+        List<Gym> gyms = gymRepository.findByOwnerUserOrderByIdAsc(user);
         return ResponseEntity.ok(gyms);
     }
 }
