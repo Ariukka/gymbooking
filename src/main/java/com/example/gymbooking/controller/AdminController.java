@@ -5,6 +5,7 @@ import com.example.gymbooking.model.Notification;
 import com.example.gymbooking.model.Payment;
 import com.example.gymbooking.model.User;
 import com.example.gymbooking.repository.BookingRepository;
+import com.example.gymbooking.repository.GymCommentRepository;
 import com.example.gymbooking.repository.GymRepository;
 import com.example.gymbooking.repository.PaymentRepository;
 import com.example.gymbooking.repository.SlotRepository;
@@ -13,6 +14,7 @@ import com.example.gymbooking.service.NotificationService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
@@ -31,6 +33,7 @@ import java.util.stream.Collectors;
 public class AdminController {
 
     private final GymRepository gymRepository;
+    private final GymCommentRepository gymCommentRepository;
     private final BookingRepository bookingRepository;
     private final SlotRepository slotRepository;
     private final UserRepository userRepository;
@@ -38,12 +41,14 @@ public class AdminController {
     private final NotificationService notificationService;
 
     public AdminController(GymRepository gymRepository,
+                           GymCommentRepository gymCommentRepository,
                            BookingRepository bookingRepository,
                            SlotRepository slotRepository,
                            UserRepository userRepository,
                            PaymentRepository paymentRepository,
                            NotificationService notificationService) {
         this.gymRepository = gymRepository;
+        this.gymCommentRepository = gymCommentRepository;
         this.bookingRepository = bookingRepository;
         this.slotRepository = slotRepository;
         this.userRepository = userRepository;
@@ -337,6 +342,7 @@ public class AdminController {
      * Gym-ийг бүрмөсөн устгах
      */
     @DeleteMapping("/gyms/{id}")
+    @Transactional
     public ResponseEntity<?> deleteGym(@PathVariable Long id,
                                        @AuthenticationPrincipal User admin) {
         Gym gym = gymRepository.findById(id).orElse(null);
@@ -347,6 +353,7 @@ public class AdminController {
         }
 
         String gymName = gym.getName();
+        gymCommentRepository.deleteByGymId(id);
         gymRepository.delete(gym);
 
         // Лог хадгалах
