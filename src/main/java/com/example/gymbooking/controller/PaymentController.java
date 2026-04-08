@@ -103,6 +103,9 @@ public class PaymentController {
     @PostMapping("/qpay/callback")
     @Transactional
     public ResponseEntity<?> qpayCallback(@RequestBody Map<String, Object> callbackData) {
+        if (callbackData == null) {
+            return ResponseEntity.badRequest().body("Request body is required");
+        }
         String invoiceId = Objects.toString(
                 callbackData.getOrDefault("invoice_id", callbackData.get("invoiceId")), null);
 
@@ -222,6 +225,9 @@ public class PaymentController {
 
     @PutMapping("/{id}/status")
     public ResponseEntity<?> updatePaymentStatus(@PathVariable Long id, @RequestBody Map<String, String> request) {
+        if (request == null) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Request body is required"));
+        }
         return paymentRepository.findById(id)
                 .map(payment -> {
                     String previousStatus = payment.getStatus();
