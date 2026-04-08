@@ -114,6 +114,14 @@ class GymCommentControllerTest {
     }
 
     @Test
+    void addComment_shouldReturnBadRequestWhenPayloadMissing() {
+        ResponseEntity<?> response = gymCommentController.addComment(user, null);
+
+        assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+        assertEquals(Map.of("error", "Request body is required"), response.getBody());
+    }
+
+    @Test
     void deleteOwnCommentByCommentId_shouldDeleteWhenOwnedByUser() {
         GymComment comment = new GymComment();
         comment.setId(11L);

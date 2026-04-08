@@ -18,10 +18,13 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 
 import java.math.BigDecimal;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -124,5 +127,14 @@ class PaymentControllerTest {
         assertEquals("QPAY", saved.getPaymentMethod());
         assertEquals(77L, saved.getUserId());
         assertEquals("PENDING", saved.getStatus());
+    }
+
+    @Test
+    void updatePaymentStatus_shouldReturnBadRequestWhenRequestBodyMissing() {
+        ResponseEntity<?> response = paymentController.updatePaymentStatus(1L, null);
+
+        assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+        assertEquals(Map.of("error", "Request body is required"), response.getBody());
+        verify(paymentRepository, never()).findById(1L);
     }
 }

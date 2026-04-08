@@ -54,6 +54,9 @@ public class GymCommentController {
     @PostMapping("/api/comments")
     public ResponseEntity<?> addComment(@AuthenticationPrincipal User user,
                                         @RequestBody Map<String, String> payload) {
+        if (payload == null) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Request body is required"));
+        }
         Long gymId = parseGymId(payload.get("gymId"));
         if (gymId == null) {
             return ResponseEntity.badRequest().body(Map.of("error", "gymId is required"));
@@ -103,6 +106,9 @@ public class GymCommentController {
     private ResponseEntity<?> createComment(Long gymId, User user, Map<String, String> payload) {
         if (user == null) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("error", "Authentication required"));
+        }
+        if (payload == null) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Request body is required"));
         }
 
         Gym gym = gymRepository.findById(gymId).orElse(null);
