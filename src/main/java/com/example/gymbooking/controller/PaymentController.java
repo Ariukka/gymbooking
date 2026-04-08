@@ -18,6 +18,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 
 @RestController
 @RequestMapping({"/api/payments", "/api/payment", "/payment"})
@@ -84,9 +85,7 @@ public class PaymentController {
                 paymentRepository.save(payment);
 
                 Booking booking = payment.getBooking();
-                booking.setStatus("CONFIRMED");
-                booking.setApproved(true);
-                bookingRepository.save(booking);
+                markBookingConfirmed(booking);
 
                 lockSlotForBooking(booking);
 
@@ -128,9 +127,7 @@ public class PaymentController {
                         }
                         paymentRepository.save(payment);
 
-                        booking.setStatus("CONFIRMED");
-                        booking.setApproved(true);
-                        bookingRepository.save(booking);
+                        markBookingConfirmed(booking);
                         lockSlotForBooking(booking);
 
                         if (!"PAID".equalsIgnoreCase(previousStatus)) {
@@ -142,9 +139,7 @@ public class PaymentController {
                         payment.setStatus("FAILED");
                         paymentRepository.save(payment);
 
-                        booking.setStatus("CANCELLED");
-                        booking.setApproved(false);
-                        bookingRepository.save(booking);
+                        markBookingCancelled(booking);
                         releaseSlotForBooking(booking);
 
                         return ResponseEntity.ok(Map.of("result", "failed"));
@@ -205,9 +200,7 @@ public class PaymentController {
                         payment.setTransactionId("TEST-BYPASS-" + booking.getId());
                         Payment saved = paymentRepository.save(payment);
 
-                        booking.setStatus("CONFIRMED");
-                        booking.setApproved(true);
-                        bookingRepository.save(booking);
+                        markBookingConfirmed(booking);
                         lockSlotForBooking(booking);
                         notificationService.createPaymentSuccessNotification(saved);
 
@@ -242,9 +235,7 @@ public class PaymentController {
                     Booking booking = payment.getBooking();
 
                     if ("PAID".equalsIgnoreCase(nextStatus)) {
-                        booking.setStatus("CONFIRMED");
-                        booking.setApproved(true);
-                        bookingRepository.save(booking);
+                        markBookingConfirmed(booking);
 
                         lockSlotForBooking(booking);
 
@@ -253,9 +244,7 @@ public class PaymentController {
                         }
                     }
                     if ("FAILED".equalsIgnoreCase(nextStatus)) {
-                        booking.setStatus("CANCELLED");
-                        booking.setApproved(false);
-                        bookingRepository.save(booking);
+                        markBookingCancelled(booking);
                         releaseSlotForBooking(booking);
                     }
                     return ResponseEntity.ok(saved);
@@ -306,5 +295,27 @@ public class PaymentController {
             return false;
         }
         return true;
+    }
+
+    private void markBookingConfirmed(Booking booking) {
+        if (booking == null) {
+            return;
+        }
+        booking.setStatus("CONFIRMED");
+        booking.setApproved(true);
+        if (booking.getConfirmedAt() == null) {
+            booking.setConfirmedAt(LocalDateTime.now());
+        }
+        bookingRepository.save(booking);
+    }
+
+    private void markBookingCancelled(Booking booking) {
+        if (booking == null) {
+            return;
+        }
+        booking.setStatus("CANCELLED");
+        booking.setApproved(false);
+        booking.setConfirmedAt(null);
+        bookingRepository.save(booking);
     }
 }

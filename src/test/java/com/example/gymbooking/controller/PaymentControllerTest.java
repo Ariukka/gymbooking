@@ -18,10 +18,14 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -136,5 +140,49 @@ class PaymentControllerTest {
         assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
         assertEquals(Map.of("error", "Request body is required"), response.getBody());
         verify(paymentRepository, never()).findById(1L);
+    }
+
+    @Test
+    void updatePaymentStatus_shouldSetConfirmedAtWhenPaymentPaid() {
+        Payment payment = new Payment();
+        payment.setId(5L);
+        payment.setBooking(booking);
+        payment.setStatus("PENDING");
+
+        when(paymentRepository.findById(5L)).thenReturn(Optional.of(payment));
+        when(paymentRepository.save(org.mockito.ArgumentMatchers.any(Payment.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(bookingRepository.save(org.mockito.ArgumentMatchers.any(Booking.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        ResponseEntity<?> response = paymentController.updatePaymentStatus(5L, Map.of("status", "PAID"));
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertEquals("CONFIRMED", booking.getStatus());
+        assertTrue(booking.isApproved());
+        assertNotNull(booking.getConfirmedAt());
+    }
+
+    @Test
+    void updatePaymentStatus_shouldClearConfirmedAtWhenPaymentFailed() {
+        booking.setConfirmedAt(LocalDateTime.now());
+
+        Payment payment = new Payment();
+        payment.setId(6L);
+        payment.setBooking(booking);
+        payment.setStatus("PENDING");
+
+        when(paymentRepository.findById(6L)).thenReturn(Optional.of(payment));
+        when(paymentRepository.save(org.mockito.ArgumentMatchers.any(Payment.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(bookingRepository.save(org.mockito.ArgumentMatchers.any(Booking.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        ResponseEntity<?> response = paymentController.updatePaymentStatus(6L, Map.of("status", "FAILED"));
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertEquals("CANCELLED", booking.getStatus());
+        assertFalse(booking.isApproved());
+        assertNull(booking.getConfirmedAt());
     }
 }
