@@ -1,7 +1,10 @@
 package com.example.gymbooking.controller;
 
 import com.example.gymbooking.config.JwtUtil;
+import com.example.gymbooking.model.Booking;
 import com.example.gymbooking.model.User;
+import com.example.gymbooking.repository.BookingRepository;
+import com.example.gymbooking.repository.NotificationRepository;
 import com.example.gymbooking.repository.UserRepository;
 import com.example.gymbooking.service.AuthService;
 import com.example.gymbooking.service.AuditLogService;
@@ -16,6 +19,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Random;
@@ -30,6 +34,8 @@ public class AuthController {
     private final AuditLogService auditLogService;
     private final PasswordEncoder passwordEncoder;
     private final UserRepository userRepository;
+    private final BookingRepository bookingRepository;
+    private final NotificationRepository notificationRepository;
     private final JwtUtil jwtUtil;
 
     @Autowired
@@ -45,12 +51,16 @@ public class AuthController {
     public AuthController(OtpService otpService, AuthService authService,
                           AuditLogService auditLogService,
                           PasswordEncoder passwordEncoder, UserRepository userRepository,
+                          BookingRepository bookingRepository,
+                          NotificationRepository notificationRepository,
                           JwtUtil jwtUtil) {
         this.otpService = otpService;
         this.authService = authService;
         this.auditLogService = auditLogService;
         this.passwordEncoder = passwordEncoder;
         this.userRepository = userRepository;
+        this.bookingRepository = bookingRepository;
+        this.notificationRepository = notificationRepository;
         this.jwtUtil = jwtUtil;
     }
 
@@ -71,6 +81,31 @@ public class AuthController {
                 "firstName", currentUser.getFirstName(),
                 "lastName", currentUser.getLastName(),
                 "role", currentUser.getRole()
+        ));
+    }
+
+    @DeleteMapping("/me")
+    public ResponseEntity<?> deleteCurrentUser(@AuthenticationPrincipal User currentUser) {
+        if (currentUser == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of(
+                    "success", false,
+                    "message", "Unauthorized"
+            ));
+        }
+
+        notificationRepository.deleteByUser_Id(currentUser.getId());
+
+        List<Booking> userBookings = bookingRepository.findByUser_Id(currentUser.getId());
+        for (Booking booking : userBookings) {
+            booking.setStatus("CANCELLED");
+            bookingRepository.save(booking);
+        }
+
+        userRepository.delete(currentUser);
+
+        return ResponseEntity.ok(Map.of(
+                "success", true,
+                "message", "Account deleted successfully"
         ));
     }
 
@@ -861,4 +896,3 @@ return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         return ResponseEntity.ok(response);
     }
 }
-
