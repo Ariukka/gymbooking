@@ -6,6 +6,7 @@ import com.example.gymbooking.model.User;
 import com.example.gymbooking.repository.BookingRepository;
 import com.example.gymbooking.repository.NotificationRepository;
 import com.example.gymbooking.repository.UserRepository;
+import com.example.gymbooking.security.LoginAttemptService;
 import com.example.gymbooking.service.AuthService;
 import com.example.gymbooking.service.AuditLogService;
 import com.example.gymbooking.service.OtpService;
@@ -17,6 +18,8 @@ import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
+
+import jakarta.servlet.http.HttpServletRequest;
 
 import java.util.HashMap;
 import java.util.List;
@@ -37,11 +40,12 @@ public class AuthController {
     private final BookingRepository bookingRepository;
     private final NotificationRepository notificationRepository;
     private final JwtUtil jwtUtil;
+    private final LoginAttemptService loginAttemptService;
 
     @Autowired
     private JavaMailSender mailSender;
 
-    // OTP хадгалах stores
+    // OTP Ñ…Ð°Ð´Ð³Ð°Ð»Ð°Ñ… stores
     private final Map<String, String> emailOtpStore = new HashMap<>();
     private final Map<String, String> emailResetStore = new HashMap<>();
     private final Map<String, String> phoneOtpStore = new HashMap<>();
@@ -53,7 +57,8 @@ public class AuthController {
                           PasswordEncoder passwordEncoder, UserRepository userRepository,
                           BookingRepository bookingRepository,
                           NotificationRepository notificationRepository,
-                          JwtUtil jwtUtil) {
+                          JwtUtil jwtUtil,
+                          LoginAttemptService loginAttemptService) {
         this.otpService = otpService;
         this.authService = authService;
         this.auditLogService = auditLogService;
@@ -62,6 +67,7 @@ public class AuthController {
         this.bookingRepository = bookingRepository;
         this.notificationRepository = notificationRepository;
         this.jwtUtil = jwtUtil;
+        this.loginAttemptService = loginAttemptService;
     }
 
     @GetMapping("/me")
@@ -111,27 +117,43 @@ public class AuthController {
 
     // ==================== LOGIN ====================
     @PostMapping("/login")
-    public ResponseEntity<?> login(@RequestBody Map<String, String> request) {
-        String identifier = request.getOrDefault("identifier", request.get("phone"));
-        String password = request.get("password");
+    public ResponseEntity<?> login(@RequestBody Map<String, String> payload,
+                                   HttpServletRequest request) {
+        String identifier = payload.getOrDefault("identifier", payload.get("phone"));
+        String password = payload.get("password");
+        String clientIp = request.getRemoteAddr();
+        String loginKey = (identifier != null && !identifier.isBlank()) ? identifier : clientIp;
 
         System.out.println("=== LOGIN ATTEMPT ===");
         System.out.println("Identifier: " + identifier);
+        System.out.println("Client IP: " + clientIp);
 
         if (identifier == null || password == null) {
             Map<String, Object> response = new HashMap<>();
             response.put("success", false);
-            response.put("message", "Утасны дугаар болон нууц үгээ оруулна уу");
+            response.put("message", "Ð£Ñ‚Ð°ÑÐ½Ñ‹ Ð´ÑƒÐ³Ð°Ð°Ñ€ Ð±Ð¾Ð»Ð¾Ð½ Ð½ÑƒÑƒÑ† Ò¯Ð³ÑÑ Ð¾Ñ€ÑƒÑƒÐ»Ð½Ð° ÑƒÑƒ");
             return ResponseEntity.badRequest().body(response);
+        }
+
+        if (loginAttemptService.isBlocked(loginKey)) {
+            auditLogService.log(null, "LOGIN_BLOCKED", "Authentication", null,
+                    String.format("Blocked login for '%s' from %s after multiple failures",
+                            safeIdentifier(identifier), clientIp));
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", String.format("Ð¢Ð¸Ð¹Ð¼ Ð¾Ð»Ð¾Ð½ ÑƒÐ´Ð°Ð³Ð¸Ð¹Ð½ Ð½ÑÐ²Ñ‚Ñ€ÑÐ»Ñ‚ Ð¾Ñ€Ð¾Ð»Ð´Ð»Ð¾Ð³Ð¾ Ð¸Ð»ÑÑÑÐ½ ÑÑƒÐ» %d Ð¼Ð¸Ð½ÑƒÑ‚ Ð´Ð°Ñ€Ð°Ð° Ð´Ð°Ñ…Ð¸Ð½ Ð¾Ñ€Ð¾Ð»Ð´Ð¾Ð½Ð¾ ÑƒÑƒ.",
+                    loginAttemptService.getBlockDurationMinutes()));
+            return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS).body(response);
         }
 
         try {
             Optional<User> userOpt = authService.findByUsername(identifier);
             if (userOpt.isEmpty()) {
                 System.out.println("User not found with identifier: " + identifier);
+                recordFailedLogin(loginKey, identifier, clientIp, "user not found");
                 Map<String, Object> response = new HashMap<>();
                 response.put("success", false);
-                response.put("message", "Утас эсвэл нууц үг буруу байна");
+                response.put("message", "Ð£Ñ‚Ð°Ñ ÑÑÐ²ÑÐ» Ð½ÑƒÑƒÑ† Ò¯Ð³ Ð±ÑƒÑ€ÑƒÑƒ Ð±Ð°Ð¹Ð½Ð°");
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
             }
 
@@ -139,10 +161,11 @@ public class AuthController {
 
             if (!passwordEncoder.matches(password, user.getPassword())) {
                 System.out.println("Invalid password for user: " + identifier);
+                recordFailedLogin(loginKey, identifier, clientIp, "wrong password");
                 Map<String, Object> response = new HashMap<>();
                 response.put("success", false);
-                response.put("message", "Утас эсвэл нууц үг буруу байна");
-return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
+                response.put("message", "Ð£Ñ‚Ð°Ñ ÑÑÐ²ÑÐ» Ð½ÑƒÑƒÑ† Ò¯Ð³ Ð±ÑƒÑ€ÑƒÑƒ Ð±Ð°Ð¹Ð½Ð°");
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
             }
 
             String tokenSubject = user.getUsername();
@@ -156,9 +179,11 @@ return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
                 System.out.println("Missing login identifier for user id: " + user.getId());
                 Map<String, Object> response = new HashMap<>();
                 response.put("success", false);
-                response.put("message", "Хэрэглэгчийн мэдээлэл дутуу байна");
+                response.put("message", "Ð¥ÑÑ€ÑÐ³Ð»ÑÐ³Ñ‡Ð¸Ð¹Ð½ Ð¼ÑÐ´ÑÑÐ»Ð»ÑÐ´ Ð´ÑƒÑ‚ÑƒÑƒ Ð±Ð°Ð¹Ð½Ð°");
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
             }
+
+            loginAttemptService.loginSucceeded(loginKey);
 
             String token = jwtUtil.generateToken(tokenSubject);
 
@@ -174,19 +199,32 @@ return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
 
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
-            response.put("message", "Нэвтрэлт амжилттай");
+            response.put("message", "ÐÑÐ²Ñ‚Ñ€ÑÐ»Ñ‚ Ð°Ð¼Ð¶Ð¸Ð»Ñ‚ÑÐ°Ð¹");
             response.put("token", token);
             response.put("user", userMap);
 
-return ResponseEntity.ok(response);
+            return ResponseEntity.ok(response);
 
         } catch (Exception e) {
             System.err.println("Login error: " + e.getMessage());
             Map<String, Object> response = new HashMap<>();
             response.put("success", false);
-            response.put("message", "Системийн алдаа гарлаа");
-return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+            response.put("message", "Ð¡Ð¸ÑÑ‚ÐµÐ¼Ð¸Ð¹Ð½ Ð°Ð»Ð´Ð°Ð° Ð³Ð°Ñ€Ð»Ð°Ð°");
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         }
+    }
+
+    private void recordFailedLogin(String loginKey, String identifier, String clientIp, String reason) {
+        boolean justBlocked = loginAttemptService.loginFailed(loginKey);
+        if (justBlocked) {
+            auditLogService.log(null, "LOGIN_BRUTE_FORCE", "Authentication", null,
+                    String.format("Identifier '%s' from %s blocked after repeated failures (%s)",
+                            safeIdentifier(identifier), clientIp, reason));
+        }
+    }
+
+    private String safeIdentifier(String identifier) {
+        return (identifier == null || identifier.isBlank()) ? "unknown" : identifier;
     }
 
     // ==================== REGISTER (DIRECT - NO OTP) ====================
@@ -206,7 +244,7 @@ return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         if (firstName == null || phone == null || password == null) {
             Map<String, Object> response = new HashMap<>();
             response.put("success", false);
-            response.put("message", "Нэр, утас, нууц үг шаардлагатай");
+            response.put("message", "ÐÑÑ€, ÑƒÑ‚Ð°Ñ, Ð½ÑƒÑƒÑ† Ò¯Ð³ ÑˆÐ°Ð°Ñ€Ð´Ð»Ð°Ð³Ð°Ñ‚Ð°Ð¹");
             return ResponseEntity.badRequest().body(response);
         }
 
@@ -214,7 +252,7 @@ return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         if (userRepository.findByPhone(phone).isPresent()) {
             Map<String, Object> response = new HashMap<>();
             response.put("success", false);
-            response.put("message", "Энэ утасны дугаар аль хэдийн бүртгэлтэй байна");
+            response.put("message", "Ð­Ð½Ñ ÑƒÑ‚Ð°ÑÐ½Ñ‹ Ð´ÑƒÐ³Ð°Ð°Ñ€ Ð°Ð»ÑŒ Ñ…ÑÐ´Ð¸Ð¹Ð½ Ð±Ò¯Ñ€Ñ‚Ð³ÑÐ»Ñ‚ÑÐ¹ Ð±Ð°Ð¹Ð½Ð°");
             return ResponseEntity.status(HttpStatus.CONFLICT).body(response);
         }
 
@@ -222,7 +260,7 @@ return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         if (email != null && !email.isBlank() && userRepository.findByEmail(email).isPresent()) {
             Map<String, Object> response = new HashMap<>();
             response.put("success", false);
-            response.put("message", "Энэ имэйл хаяг аль хэдийн бүртгэлтэй байна");
+            response.put("message", "Ð­Ð½Ñ Ð¸Ð¼ÑÐ¹Ð» Ñ…Ð°ÑÐ³ Ð°Ð»ÑŒ Ñ…ÑÐ´Ð¸Ð¹Ð½ Ð±Ò¯Ñ€Ñ‚Ð³ÑÐ»Ñ‚ÑÐ¹ Ð±Ð°Ð¹Ð½Ð°");
             return ResponseEntity.status(HttpStatus.CONFLICT).body(response);
         }
 
@@ -255,11 +293,11 @@ return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
 
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
-            response.put("message", "Бүртгэл амжилттай");
+            response.put("message", "Ð‘Ò¯Ñ€Ñ‚Ð³ÑÐ» Ð°Ð¼Ð¶Ð¸Ð»Ñ‚Ñ‚Ð°Ð¹");
             response.put("token", token);
             response.put("user", userMap);
 
-            System.out.println("✅ User registered successfully (direct): " + phone);
+            System.out.println("âœ… User registered successfully (direct): " + phone);
 
             return ResponseEntity.ok(response);
 
@@ -267,7 +305,7 @@ return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
             System.err.println("Registration error: " + e.getMessage());
             Map<String, Object> response = new HashMap<>();
             response.put("success", false);
-            response.put("message", "Бүртгэл үүсгэхэд алдаа гарлаа: " + e.getMessage());
+            response.put("message", "Ð‘Ò¯Ñ€Ñ‚Ð³ÑÐ» Ò¯Ò¯ÑÐ³ÑÑ…ÑÐ´ Ð°Ð»Ð´Ð°Ð° Ð³Ð°Ñ€Ð»Ð°Ð°: " + e.getMessage());
             auditLogService.log(null, "LOGIN_ERROR", "Authentication", null, "Login exception for " + phone + ": " + e.getMessage());
             auditLogService.log(null, "LOGIN_ERROR", "Authentication", null, "Login exception for " + phone + ": " + e.getMessage());
 return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
@@ -290,14 +328,14 @@ return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         if (phone == null || firstName == null || password == null) {
             Map<String, Object> response = new HashMap<>();
             response.put("success", false);
-            response.put("message", "Нэр, утас, нууц үг шаардлагатай");
+            response.put("message", "ÐÑÑ€, ÑƒÑ‚Ð°Ñ, Ð½ÑƒÑƒÑ† Ò¯Ð³ ÑˆÐ°Ð°Ñ€Ð´Ð»Ð°Ð³Ð°Ñ‚Ð°Ð¹");
             return ResponseEntity.badRequest().body(response);
         }
 
         if (email == null || email.isBlank()) {
             Map<String, Object> response = new HashMap<>();
             response.put("success", false);
-            response.put("message", "Имэйл хаяг шаардлагатай");
+            response.put("message", "Ð˜Ð¼ÑÐ¹Ð» Ñ…Ð°ÑÐ³ ÑˆÐ°Ð°Ñ€Ð´Ð»Ð°Ð³Ð°Ñ‚Ð°Ð¹");
             return ResponseEntity.badRequest().body(response);
         }
 
@@ -305,14 +343,14 @@ return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         if (userRepository.findByPhone(phone).isPresent()) {
             Map<String, Object> response = new HashMap<>();
             response.put("success", false);
-            response.put("message", "Энэ утасны дугаар аль хэдийн бүртгэлтэй байна");
+            response.put("message", "Ð­Ð½Ñ ÑƒÑ‚Ð°ÑÐ½Ñ‹ Ð´ÑƒÐ³Ð°Ð°Ñ€ Ð°Ð»ÑŒ Ñ…ÑÐ´Ð¸Ð¹Ð½ Ð±Ò¯Ñ€Ñ‚Ð³ÑÐ»Ñ‚ÑÐ¹ Ð±Ð°Ð¹Ð½Ð°");
             return ResponseEntity.status(HttpStatus.CONFLICT).body(response);
         }
 
         if (userRepository.findByEmail(email).isPresent()) {
             Map<String, Object> response = new HashMap<>();
             response.put("success", false);
-            response.put("message", "Энэ имэйл хаяг аль хэдийн бүртгэлтэй байна");
+            response.put("message", "Ð­Ð½Ñ Ð¸Ð¼ÑÐ¹Ð» Ñ…Ð°ÑÐ³ Ð°Ð»ÑŒ Ñ…ÑÐ´Ð¸Ð¹Ð½ Ð±Ò¯Ñ€Ñ‚Ð³ÑÐ»Ñ‚ÑÐ¹ Ð±Ð°Ð¹Ð½Ð°");
             return ResponseEntity.status(HttpStatus.CONFLICT).body(response);
         }
 
@@ -341,9 +379,9 @@ return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         // SEND EMAIL WITH OTP
         try {
             sendEmailOtp(email, otp, firstName);
-            System.out.println("✅ OTP email sent to: " + email);
+            System.out.println("âœ… OTP email sent to: " + email);
         } catch (Exception e) {
-            System.err.println("❌ Failed to send OTP email: " + e.getMessage());
+            System.err.println("âŒ Failed to send OTP email: " + e.getMessage());
         }
 
         // Set expiration (10 minutes for development, 5 for production)
@@ -361,9 +399,9 @@ return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
 
         Map<String, Object> response = new HashMap<>();
         response.put("success", true);
-        response.put("message", "Баталгаажуулах код имэйл хаяг руу илгээгдлээ");
+        response.put("message", "Ð‘Ð°Ñ‚Ð°Ð»Ð³Ð°Ð°Ð¶ÑƒÑƒÐ»Ð°Ñ… ÐºÐ¾Ð´ Ð¸Ð¼ÑÐ¹Ð» Ñ…Ð°ÑÐ³ Ñ€ÑƒÑƒ Ð¸Ð»Ð³ÑÑÐ³Ð´Ð»ÑÑ");
         response.put("email", email);
-        response.put("otpForDev", otp); // Development-д зориулж
+        response.put("otpForDev", otp); // Development-Ð´ Ð·Ð¾Ñ€Ð¸ÑƒÐ»Ð¶
 
         return ResponseEntity.ok(response);
     }
@@ -418,7 +456,7 @@ return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
 
                 Map<String, Object> response = new HashMap<>();
                 response.put("success", true);
-                response.put("message", "Бүртгэл амжилттай баталгаажлаа");
+                response.put("message", "Ð‘Ò¯Ñ€Ñ‚Ð³ÑÐ» Ð°Ð¼Ð¶Ð¸Ð»Ñ‚Ñ‚Ð°Ð¹ Ð±Ð°Ñ‚Ð°Ð»Ð³Ð°Ð°Ð¶Ð»Ð°Ð°");
                 response.put("token", token);
                 response.put("user", userMap);
 
@@ -427,7 +465,7 @@ return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
 
             Map<String, Object> response = new HashMap<>();
             response.put("success", false);
-            response.put("message", "Имэйл болон кодыг оруулна уу");
+            response.put("message", "Ð˜Ð¼ÑÐ¹Ð» Ð±Ð¾Ð»Ð¾Ð½ ÐºÐ¾Ð´Ñ‹Ð³ Ð¾Ñ€ÑƒÑƒÐ»Ð½Ð° ÑƒÑƒ");
             return ResponseEntity.badRequest().body(response);
         }
 
@@ -435,14 +473,14 @@ return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         if (savedOtp == null) {
             Map<String, Object> response = new HashMap<>();
             response.put("success", false);
-            response.put("message", "Код хугацаа дууссан эсвэл буруу байна. Дахин хүсэлт илгээнэ үү.");
+            response.put("message", "ÐšÐ¾Ð´ Ñ…ÑƒÐ³Ð°Ñ†Ð°Ð° Ð´ÑƒÑƒÑÑÐ°Ð½ ÑÑÐ²ÑÐ» Ð±ÑƒÑ€ÑƒÑƒ Ð±Ð°Ð¹Ð½Ð°. Ð”Ð°Ñ…Ð¸Ð½ Ñ…Ò¯ÑÑÐ»Ñ‚ Ð¸Ð»Ð³ÑÑÐ½Ñ Ò¯Ò¯.");
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
         }
 
         if (!savedOtp.equals(otp)) {
             Map<String, Object> response = new HashMap<>();
             response.put("success", false);
-            response.put("message", "Код буруу байна. Дахин оролдоно уу.");
+            response.put("message", "ÐšÐ¾Ð´ Ð±ÑƒÑ€ÑƒÑƒ Ð±Ð°Ð¹Ð½Ð°. Ð”Ð°Ñ…Ð¸Ð½ Ð¾Ñ€Ð¾Ð»Ð´Ð¾Ð½Ð¾ ÑƒÑƒ.");
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
         }
 
@@ -450,7 +488,7 @@ return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         if (tempUser == null) {
             Map<String, Object> response = new HashMap<>();
             response.put("success", false);
-            response.put("message", "Хэрэглэгчийн мэдээлэл олдсонгүй. Дахин бүртгүүлнэ үү.");
+            response.put("message", "Ð¥ÑÑ€ÑÐ³Ð»ÑÐ³Ñ‡Ð¸Ð¹Ð½ Ð¼ÑÐ´ÑÑÐ»ÑÐ» Ð¾Ð»Ð´ÑÐ¾Ð½Ð³Ò¯Ð¹. Ð”Ð°Ñ…Ð¸Ð½ Ð±Ò¯Ñ€Ñ‚Ð³Ò¯Ò¯Ð»Ð½Ñ Ò¯Ò¯.");
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
         }
 
@@ -475,18 +513,18 @@ return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
 
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
-            response.put("message", "Бүртгэл амжилттай баталгаажлаа");
+            response.put("message", "Ð‘Ò¯Ñ€Ñ‚Ð³ÑÐ» Ð°Ð¼Ð¶Ð¸Ð»Ñ‚Ñ‚Ð°Ð¹ Ð±Ð°Ñ‚Ð°Ð»Ð³Ð°Ð°Ð¶Ð»Ð°Ð°");
             response.put("token", token);
             response.put("user", userMap);
 
-            System.out.println("✅ User registered successfully: " + tempUser.getPhone());
+            System.out.println("âœ… User registered successfully: " + tempUser.getPhone());
             return ResponseEntity.ok(response);
 
         } catch (Exception e) {
             System.err.println("Registration completion error: " + e.getMessage());
             Map<String, Object> response = new HashMap<>();
             response.put("success", false);
-            response.put("message", "Бүртгэл дуусгахад алдаа гарлаа: " + e.getMessage());
+            response.put("message", "Ð‘Ò¯Ñ€Ñ‚Ð³ÑÐ» Ð´ÑƒÑƒÑÐ³Ð°Ñ…Ð°Ð´ Ð°Ð»Ð´Ð°Ð° Ð³Ð°Ñ€Ð»Ð°Ð°: " + e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         }
     }
@@ -506,7 +544,7 @@ return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         if (email == null || otp == null) {
             Map<String, Object> response = new HashMap<>();
             response.put("success", false);
-            response.put("message", "Имэйл болон кодыг оруулна уу");
+            response.put("message", "Ð˜Ð¼ÑÐ¹Ð» Ð±Ð¾Ð»Ð¾Ð½ ÐºÐ¾Ð´Ñ‹Ð³ Ð¾Ñ€ÑƒÑƒÐ»Ð½Ð° ÑƒÑƒ");
             return ResponseEntity.badRequest().body(response);
         }
 
@@ -514,14 +552,14 @@ return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         if (savedOtp == null) {
             Map<String, Object> response = new HashMap<>();
             response.put("success", false);
-            response.put("message", "Код хугацаа дууссан эсвэл буруу байна. Дахин хүсэлт илгээнэ үү.");
+            response.put("message", "ÐšÐ¾Ð´ Ñ…ÑƒÐ³Ð°Ñ†Ð°Ð° Ð´ÑƒÑƒÑÑÐ°Ð½ ÑÑÐ²ÑÐ» Ð±ÑƒÑ€ÑƒÑƒ Ð±Ð°Ð¹Ð½Ð°. Ð”Ð°Ñ…Ð¸Ð½ Ñ…Ò¯ÑÑÐ»Ñ‚ Ð¸Ð»Ð³ÑÑÐ½Ñ Ò¯Ò¯.");
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
         }
 
         if (!savedOtp.equals(otp)) {
             Map<String, Object> response = new HashMap<>();
             response.put("success", false);
-            response.put("message", "Код буруу байна. Дахин оролдоно уу.");
+            response.put("message", "ÐšÐ¾Ð´ Ð±ÑƒÑ€ÑƒÑƒ Ð±Ð°Ð¹Ð½Ð°. Ð”Ð°Ñ…Ð¸Ð½ Ð¾Ñ€Ð¾Ð»Ð´Ð¾Ð½Ð¾ ÑƒÑƒ.");
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
         }
 
@@ -529,7 +567,7 @@ return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         if (tempUser == null) {
             Map<String, Object> response = new HashMap<>();
             response.put("success", false);
-            response.put("message", "Хэрэглэгчийн мэдээлэл олдсонгүй. Дахин бүртгүүлнэ үү.");
+            response.put("message", "Ð¥ÑÑ€ÑÐ³Ð»ÑÐ³Ñ‡Ð¸Ð¹Ð½ Ð¼ÑÐ´ÑÑÐ»ÑÐ» Ð¾Ð»Ð´ÑÐ¾Ð½Ð³Ò¯Ð¹. Ð”Ð°Ñ…Ð¸Ð½ Ð±Ò¯Ñ€Ñ‚Ð³Ò¯Ò¯Ð»Ð½Ñ Ò¯Ò¯.");
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
         }
 
@@ -554,11 +592,11 @@ return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
 
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
-            response.put("message", "Бүртгэл амжилттай баталгаажлаа");
+            response.put("message", "Ð‘Ò¯Ñ€Ñ‚Ð³ÑÐ» Ð°Ð¼Ð¶Ð¸Ð»Ñ‚Ñ‚Ð°Ð¹ Ð±Ð°Ñ‚Ð°Ð»Ð³Ð°Ð°Ð¶Ð»Ð°Ð°");
             response.put("token", token);
             response.put("user", userMap);
 
-            System.out.println("✅ User registered successfully: " + tempUser.getPhone());
+            System.out.println("âœ… User registered successfully: " + tempUser.getPhone());
 
             return ResponseEntity.ok(response);
 
@@ -566,7 +604,7 @@ return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
             System.err.println("Registration error: " + e.getMessage());
             Map<String, Object> response = new HashMap<>();
             response.put("success", false);
-            response.put("message", "Бүртгэл үүсгэхэд алдаа гарлаа");
+            response.put("message", "Ð‘Ò¯Ñ€Ñ‚Ð³ÑÐ» Ò¯Ò¯ÑÐ³ÑÑ…ÑÐ´ Ð°Ð»Ð´Ð°Ð° Ð³Ð°Ñ€Ð»Ð°Ð°");
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         }
     }
@@ -582,7 +620,7 @@ return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         if (email == null || email.isBlank()) {
             Map<String, Object> response = new HashMap<>();
             response.put("success", false);
-            response.put("message", "Имэйл хаягаа оруулна уу");
+            response.put("message", "Ð˜Ð¼ÑÐ¹Ð» Ñ…Ð°ÑÐ³Ð°Ð° Ð¾Ñ€ÑƒÑƒÐ»Ð½Ð° ÑƒÑƒ");
             return ResponseEntity.badRequest().body(response);
         }
 
@@ -603,22 +641,22 @@ return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         }).start();
 
         try {
-            sendEmailOtp(email, otp, "Хэрэглэгч");
-            System.out.println("✅ OTP email sent to: " + email);
+            sendEmailOtp(email, otp, "Ð¥ÑÑ€ÑÐ³Ð»ÑÐ³Ñ‡");
+            System.out.println("âœ… OTP email sent to: " + email);
 
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
-            response.put("message", "Баталгаажуулах код имэйл хаяг руу илгээгдлээ.");
+            response.put("message", "Ð‘Ð°Ñ‚Ð°Ð»Ð³Ð°Ð°Ð¶ÑƒÑƒÐ»Ð°Ñ… ÐºÐ¾Ð´ Ð¸Ð¼ÑÐ¹Ð» Ñ…Ð°ÑÐ³ Ñ€ÑƒÑƒ Ð¸Ð»Ð³ÑÑÐ³Ð´Ð»ÑÑ.");
             response.put("otpForDev", otp);
 
             return ResponseEntity.ok(response);
 
         } catch (Exception e) {
-            System.err.println("❌ Failed to send email: " + e.getMessage());
+            System.err.println("âŒ Failed to send email: " + e.getMessage());
 
             Map<String, Object> response = new HashMap<>();
             response.put("success", false);
-            response.put("message", "Имэйл илгээхэд алдаа гарлаа. Дахин оролдоно уу.");
+            response.put("message", "Ð˜Ð¼ÑÐ¹Ð» Ð¸Ð»Ð³ÑÑÑ…ÑÐ´ Ð°Ð»Ð´Ð°Ð° Ð³Ð°Ñ€Ð»Ð°Ð°. Ð”Ð°Ñ…Ð¸Ð½ Ð¾Ñ€Ð¾Ð»Ð´Ð¾Ð½Ð¾ ÑƒÑƒ.");
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         }
     }
@@ -628,14 +666,14 @@ return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         try {
             SimpleMailMessage message = new SimpleMailMessage();
             message.setTo(email);
-            message.setSubject("GymBooking - Баталгаажуулах код");
-            message.setText("Сайн уу " + name + ",\n\nТаны баталгаажуулах код: " + otp + "\n\nЭнэ код 5 минутын хугацаанд хүчинтэй.\n\nХэрэв та энэ хүсэлт илгээгээгүй бол энэ мэйлийг үл тоомсорлоно уу.\n\nGymBooking баг");
+            message.setSubject("GymBooking - Ð‘Ð°Ñ‚Ð°Ð»Ð³Ð°Ð°Ð¶ÑƒÑƒÐ»Ð°Ñ… ÐºÐ¾Ð´");
+            message.setText("Ð¡Ð°Ð¹Ð½ ÑƒÑƒ " + name + ",\n\nÐ¢Ð°Ð½Ñ‹ Ð±Ð°Ñ‚Ð°Ð»Ð³Ð°Ð°Ð¶ÑƒÑƒÐ»Ð°Ñ… ÐºÐ¾Ð´: " + otp + "\n\nÐ­Ð½Ñ ÐºÐ¾Ð´ 5 Ð¼Ð¸Ð½ÑƒÑ‚Ñ‹Ð½ Ñ…ÑƒÐ³Ð°Ñ†Ð°Ð°Ð½Ð´ Ñ…Ò¯Ñ‡Ð¸Ð½Ñ‚ÑÐ¹.\n\nÐ¥ÑÑ€ÑÐ² Ñ‚Ð° ÑÐ½Ñ Ñ…Ò¯ÑÑÐ»Ñ‚ Ð¸Ð»Ð³ÑÑÐ³ÑÑÐ³Ò¯Ð¹ Ð±Ð¾Ð» ÑÐ½Ñ Ð¼ÑÐ¹Ð»Ð¸Ð¹Ð³ Ò¯Ð» Ñ‚Ð¾Ð¾Ð¼ÑÐ¾Ñ€Ð»Ð¾Ð½Ð¾ ÑƒÑƒ.\n\nGymBooking Ð±Ð°Ð³");
             message.setFrom("gymbooking@gmail.com");
 
             mailSender.send(message);
-            System.out.println("✅ Email sent successfully to: " + email);
+            System.out.println("âœ… Email sent successfully to: " + email);
         } catch (Exception e) {
-            System.err.println("❌ Email send failed: " + e.getMessage());
+            System.err.println("âŒ Email send failed: " + e.getMessage());
             throw new RuntimeException("Email send failed: " + e.getMessage());
         }
     }
@@ -649,7 +687,7 @@ return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         if (phone == null || phone.isBlank()) {
             Map<String, Object> response = new HashMap<>();
             response.put("success", false);
-            response.put("message", "Утасны дугаараа оруулна уу");
+            response.put("message", "Ð£Ñ‚Ð°ÑÐ½Ñ‹ Ð´ÑƒÐ³Ð°Ð°Ñ€Ð°Ð° Ð¾Ñ€ÑƒÑƒÐ»Ð½Ð° ÑƒÑƒ");
             return ResponseEntity.badRequest().body(response);
         }
 
@@ -671,7 +709,7 @@ return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
 
         Map<String, Object> response = new HashMap<>();
         response.put("success", true);
-        response.put("message", "Баталгаажуулах код утас руу илгээгдлээ.");
+        response.put("message", "Ð‘Ð°Ñ‚Ð°Ð»Ð³Ð°Ð°Ð¶ÑƒÑƒÐ»Ð°Ñ… ÐºÐ¾Ð´ ÑƒÑ‚Ð°Ñ Ñ€ÑƒÑƒ Ð¸Ð»Ð³ÑÑÐ³Ð´Ð»ÑÑ.");
         response.put("otpForDev", otp);
 
         return ResponseEntity.ok(response);
@@ -687,7 +725,7 @@ return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         if (phone == null || otp == null) {
             Map<String, Object> response = new HashMap<>();
             response.put("success", false);
-            response.put("message", "Утас болон кодыг оруулна уу");
+            response.put("message", "Ð£Ñ‚Ð°Ñ Ð±Ð¾Ð»Ð¾Ð½ ÐºÐ¾Ð´Ñ‹Ð³ Ð¾Ñ€ÑƒÑƒÐ»Ð½Ð° ÑƒÑƒ");
             return ResponseEntity.badRequest().body(response);
         }
 
@@ -695,14 +733,14 @@ return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         if (savedOtp == null) {
             Map<String, Object> response = new HashMap<>();
             response.put("success", false);
-            response.put("message", "Код хугацаа дууссан эсвэл буруу байна. Дахин хүсэлт илгээнэ үү.");
+            response.put("message", "ÐšÐ¾Ð´ Ñ…ÑƒÐ³Ð°Ñ†Ð°Ð° Ð´ÑƒÑƒÑÑÐ°Ð½ ÑÑÐ²ÑÐ» Ð±ÑƒÑ€ÑƒÑƒ Ð±Ð°Ð¹Ð½Ð°. Ð”Ð°Ñ…Ð¸Ð½ Ñ…Ò¯ÑÑÐ»Ñ‚ Ð¸Ð»Ð³ÑÑÐ½Ñ Ò¯Ò¯.");
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
         }
 
         if (!savedOtp.equals(otp)) {
             Map<String, Object> response = new HashMap<>();
             response.put("success", false);
-            response.put("message", "Код буруу байна. Дахин оролдоно уу.");
+            response.put("message", "ÐšÐ¾Ð´ Ð±ÑƒÑ€ÑƒÑƒ Ð±Ð°Ð¹Ð½Ð°. Ð”Ð°Ñ…Ð¸Ð½ Ð¾Ñ€Ð¾Ð»Ð´Ð¾Ð½Ð¾ ÑƒÑƒ.");
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
         }
 
@@ -710,7 +748,7 @@ return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
 
         Map<String, Object> response = new HashMap<>();
         response.put("success", true);
-        response.put("message", "Баталгаажуулалт амжилттай");
+        response.put("message", "Ð‘Ð°Ñ‚Ð°Ð»Ð³Ð°Ð°Ð¶ÑƒÑƒÐ»Ð°Ð»Ñ‚ Ð°Ð¼Ð¶Ð¸Ð»Ñ‚Ñ‚Ð°Ð¹");
         return ResponseEntity.ok(response);
     }
 
@@ -725,7 +763,7 @@ return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         if (email == null || email.isBlank()) {
             Map<String, Object> response = new HashMap<>();
             response.put("success", false);
-            response.put("message", "Имэйл хаягаа оруулна уу");
+            response.put("message", "Ð˜Ð¼ÑÐ¹Ð» Ñ…Ð°ÑÐ³Ð°Ð° Ð¾Ñ€ÑƒÑƒÐ»Ð½Ð° ÑƒÑƒ");
             return ResponseEntity.badRequest().body(response);
         }
 
@@ -733,7 +771,7 @@ return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         if (userOpt.isEmpty()) {
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
-            response.put("message", "Хэрэв имэйл бүртгэлтэй бол баталгаажуулах код илгээгдсэн.");
+            response.put("message", "Ð¥ÑÑ€ÑÐ² Ð¸Ð¼ÑÐ¹Ð» Ð±Ò¯Ñ€Ñ‚Ð³ÑÐ»Ñ‚ÑÐ¹ Ð±Ð¾Ð» Ð±Ð°Ñ‚Ð°Ð»Ð³Ð°Ð°Ð¶ÑƒÑƒÐ»Ð°Ñ… ÐºÐ¾Ð´ Ð¸Ð»Ð³ÑÑÐ³Ð´ÑÑÐ½.");
             return ResponseEntity.ok(response);
         }
 
@@ -757,7 +795,7 @@ return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
 
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
-            response.put("message", "Баталгаажуулах код имэйл хаяг руу илгээгдлээ.");
+            response.put("message", "Ð‘Ð°Ñ‚Ð°Ð»Ð³Ð°Ð°Ð¶ÑƒÑƒÐ»Ð°Ñ… ÐºÐ¾Ð´ Ð¸Ð¼ÑÐ¹Ð» Ñ…Ð°ÑÐ³ Ñ€ÑƒÑƒ Ð¸Ð»Ð³ÑÑÐ³Ð´Ð»ÑÑ.");
             response.put("otpForDev", otp);
             return ResponseEntity.ok(response);
 
@@ -767,7 +805,7 @@ return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
 
             Map<String, Object> response = new HashMap<>();
             response.put("success", false);
-            response.put("message", "Имэйл илгээхэд алдаа гарлаа. Дахин оролдоно уу.");
+            response.put("message", "Ð˜Ð¼ÑÐ¹Ð» Ð¸Ð»Ð³ÑÑÑ…ÑÐ´ Ð°Ð»Ð´Ð°Ð° Ð³Ð°Ñ€Ð»Ð°Ð°. Ð”Ð°Ñ…Ð¸Ð½ Ð¾Ñ€Ð¾Ð»Ð´Ð¾Ð½Ð¾ ÑƒÑƒ.");
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         }
     }
@@ -785,7 +823,7 @@ return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         if (email == null || otp == null) {
             Map<String, Object> response = new HashMap<>();
             response.put("success", false);
-            response.put("message", "Имэйл болон кодыг оруулна уу");
+            response.put("message", "Ð˜Ð¼ÑÐ¹Ð» Ð±Ð¾Ð»Ð¾Ð½ ÐºÐ¾Ð´Ñ‹Ð³ Ð¾Ñ€ÑƒÑƒÐ»Ð½Ð° ÑƒÑƒ");
             return ResponseEntity.badRequest().body(response);
         }
 
@@ -793,14 +831,14 @@ return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         if (savedOtp == null) {
             Map<String, Object> response = new HashMap<>();
             response.put("success", false);
-            response.put("message", "Код хугацаа дууссан эсвэл буруу байна. Дахин хүсэлт илгээнэ үү.");
+            response.put("message", "ÐšÐ¾Ð´ Ñ…ÑƒÐ³Ð°Ñ†Ð°Ð° Ð´ÑƒÑƒÑÑÐ°Ð½ ÑÑÐ²ÑÐ» Ð±ÑƒÑ€ÑƒÑƒ Ð±Ð°Ð¹Ð½Ð°. Ð”Ð°Ñ…Ð¸Ð½ Ñ…Ò¯ÑÑÐ»Ñ‚ Ð¸Ð»Ð³ÑÑÐ½Ñ Ò¯Ò¯.");
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
         }
 
         if (!savedOtp.equals(otp)) {
             Map<String, Object> response = new HashMap<>();
             response.put("success", false);
-            response.put("message", "Код буруу байна. Дахин оролдоно уу.");
+            response.put("message", "ÐšÐ¾Ð´ Ð±ÑƒÑ€ÑƒÑƒ Ð±Ð°Ð¹Ð½Ð°. Ð”Ð°Ñ…Ð¸Ð½ Ð¾Ñ€Ð¾Ð»Ð´Ð¾Ð½Ð¾ ÑƒÑƒ.");
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
         }
 
@@ -813,7 +851,7 @@ return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
 
         Map<String, Object> response = new HashMap<>();
         response.put("success", true);
-        response.put("message", "Код зөв байна. Шинэ нууц үг оруулна уу.");
+        response.put("message", "ÐšÐ¾Ð´ Ð·Ó©Ð² Ð±Ð°Ð¹Ð½Ð°. Ð¨Ð¸Ð½Ñ Ð½ÑƒÑƒÑ† Ò¯Ð³ Ð¾Ñ€ÑƒÑƒÐ»Ð½Ð° ÑƒÑƒ.");
         response.put("resetToken", resetToken);
         return ResponseEntity.ok(response);
     }
@@ -830,14 +868,14 @@ return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         if (resetToken == null || resetToken.isBlank()) {
             Map<String, Object> response = new HashMap<>();
             response.put("success", false);
-            response.put("message", "Хүчингүй хүсэлт");
+            response.put("message", "Ð¥Ò¯Ñ‡Ð¸Ð½Ð³Ò¯Ð¹ Ñ…Ò¯ÑÑÐ»Ñ‚");
             return ResponseEntity.badRequest().body(response);
         }
 
         if (newPassword == null || newPassword.isBlank() || newPassword.length() < 6) {
             Map<String, Object> response = new HashMap<>();
             response.put("success", false);
-            response.put("message", "Нууц үг хамгийн багадаа 6 тэмдэгт байх ёстой");
+            response.put("message", "ÐÑƒÑƒÑ† Ò¯Ð³ Ñ…Ð°Ð¼Ð³Ð¸Ð¹Ð½ Ð±Ð°Ð³Ð°Ð´Ð°Ð° 6 Ñ‚ÑÐ¼Ð´ÑÐ³Ñ‚ Ð±Ð°Ð¹Ñ… Ñ‘ÑÑ‚Ð¾Ð¹");
             return ResponseEntity.badRequest().body(response);
         }
 
@@ -845,7 +883,7 @@ return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         if (email == null) {
             Map<String, Object> response = new HashMap<>();
             response.put("success", false);
-            response.put("message", "Хүчингүй эсвэл хугацаа дууссан хүсэлт. Дахин код авах хүсэлт илгээнэ үү.");
+            response.put("message", "Ð¥Ò¯Ñ‡Ð¸Ð½Ð³Ò¯Ð¹ ÑÑÐ²ÑÐ» Ñ…ÑƒÐ³Ð°Ñ†Ð°Ð° Ð´ÑƒÑƒÑÑÐ°Ð½ Ñ…Ò¯ÑÑÐ»Ñ‚. Ð”Ð°Ñ…Ð¸Ð½ ÐºÐ¾Ð´ Ð°Ð²Ð°Ñ… Ñ…Ò¯ÑÑÐ»Ñ‚ Ð¸Ð»Ð³ÑÑÐ½Ñ Ò¯Ò¯.");
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
         }
 
@@ -853,7 +891,7 @@ return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         if (userOpt.isEmpty()) {
             Map<String, Object> response = new HashMap<>();
             response.put("success", false);
-            response.put("message", "Хэрэглэгч олдсонгүй");
+            response.put("message", "Ð¥ÑÑ€ÑÐ³Ð»ÑÐ³Ñ‡ Ð¾Ð»Ð´ÑÐ¾Ð½Ð³Ò¯Ð¹");
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
         }
 
@@ -867,7 +905,7 @@ return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
 
         Map<String, Object> response = new HashMap<>();
         response.put("success", true);
-        response.put("message", "Нууц үг амжилттай шинэчлэгдлээ. Одоо шинэ нууц үгээр нэвтрэх боломжтой.");
+        response.put("message", "ÐÑƒÑƒÑ† Ò¯Ð³ Ð°Ð¼Ð¶Ð¸Ð»Ñ‚Ñ‚Ð°Ð¹ ÑˆÐ¸Ð½ÑÑ‡Ð»ÑÐ³Ð´Ð»ÑÑ. ÐžÐ´Ð¾Ð¾ ÑˆÐ¸Ð½Ñ Ð½ÑƒÑƒÑ† Ò¯Ð³ÑÑÑ€ Ð½ÑÐ²Ñ‚Ñ€ÑÑ… Ð±Ð¾Ð»Ð¾Ð¼Ð¶Ñ‚Ð¾Ð¹.");
         return ResponseEntity.ok(response);
     }
 
@@ -877,7 +915,7 @@ return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         if (token == null || token.isBlank()) {
             Map<String, Object> response = new HashMap<>();
             response.put("success", false);
-            response.put("message", "Token оруулна уу");
+            response.put("message", "Token Ð¾Ñ€ÑƒÑƒÐ»Ð½Ð° ÑƒÑƒ");
             return ResponseEntity.badRequest().body(response);
         }
 
@@ -885,13 +923,13 @@ return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         if (email == null) {
             Map<String, Object> response = new HashMap<>();
             response.put("success", false);
-            response.put("message", "Token хүчингүй эсвэл хугацаа дууссан байна");
+            response.put("message", "Token Ñ…Ò¯Ñ‡Ð¸Ð½Ð³Ò¯Ð¹ ÑÑÐ²ÑÐ» Ñ…ÑƒÐ³Ð°Ñ†Ð°Ð° Ð´ÑƒÑƒÑÑÐ°Ð½ Ð±Ð°Ð¹Ð½Ð°");
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
         }
 
         Map<String, Object> response = new HashMap<>();
         response.put("success", true);
-        response.put("message", "Token хүчинтэй байна");
+        response.put("message", "Token Ñ…Ò¯Ñ‡Ð¸Ð½Ñ‚ÑÐ¹ Ð±Ð°Ð¹Ð½Ð°");
         response.put("email", email);
         return ResponseEntity.ok(response);
     }

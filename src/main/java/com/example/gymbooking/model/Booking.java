@@ -47,6 +47,9 @@ public class Booking {
     @Column(name = "confirmed_at")  // Add this field
     private LocalDateTime confirmedAt;
 
+    @Column(name = "cancelled_at")
+    private LocalDateTime cancelledAt;
+
     @PrePersist
     public void prePersist() {
         if (createdAt == null) {
@@ -151,5 +154,13 @@ public class Booking {
 
     public void setConfirmedAt(LocalDateTime confirmedAt) {
         this.confirmedAt = confirmedAt;
+    }
+
+    public LocalDateTime getCancelledAt() {
+        return cancelledAt;
+    }
+
+    public void setCancelledAt(LocalDateTime cancelledAt) {
+        this.cancelledAt = cancelledAt;
     }
 }

@@ -9,6 +9,7 @@ import com.example.gymbooking.repository.GymRepository;
 import com.example.gymbooking.repository.PaymentRepository;
 import com.example.gymbooking.repository.SlotRepository;
 import com.example.gymbooking.repository.UserRepository;
+import com.example.gymbooking.service.GymDataService;
 import com.example.gymbooking.service.NotificationService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -35,19 +36,22 @@ public class AdminController {
     private final SlotRepository slotRepository;
     private final UserRepository userRepository;
     private final PaymentRepository paymentRepository;
+    private final GymDataService gymDataService;
     private final NotificationService notificationService;
 
     public AdminController(GymRepository gymRepository,
-                           BookingRepository bookingRepository,
-                           SlotRepository slotRepository,
-                           UserRepository userRepository,
-                           PaymentRepository paymentRepository,
-                           NotificationService notificationService) {
+                            BookingRepository bookingRepository,
+                            SlotRepository slotRepository,
+                            UserRepository userRepository,
+                            PaymentRepository paymentRepository,
+                            GymDataService gymDataService,
+                            NotificationService notificationService) {
         this.gymRepository = gymRepository;
         this.bookingRepository = bookingRepository;
         this.slotRepository = slotRepository;
         this.userRepository = userRepository;
         this.paymentRepository = paymentRepository;
+        this.gymDataService = gymDataService;
         this.notificationService = notificationService;
     }
 
@@ -965,6 +969,37 @@ public class AdminController {
         response.put("unreadCount", notifications.size());
         response.put("totalCount", notifications.size());
         return ResponseEntity.ok(response);
+    }
+
+    private boolean isSystemAdmin(User user) {
+        if (user == null) {
+            return false;
+        }
+        String role = user.getRole();
+        return "SUPER_ADMIN".equals(role) || "ADMIN".equals(role);
+    }
+
+    @PostMapping("/system/sync-gyms")
+    public ResponseEntity<?> syncGyms(@AuthenticationPrincipal User admin) {
+        if (!isSystemAdmin(admin)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(Map.of("success", false, "message", "Unauthorized"));
+        }
+
+        try {
+            List<Gym> synced = gymDataService.syncGymsFromJson();
+            return ResponseEntity.ok(Map.of(
+                    "success", true,
+                    "message", "Gym list refreshed",
+                    "imported", synced.size()
+            ));
+        } catch (Exception ex) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of(
+                    "success", false,
+                    "message", "Failed to sync gym data",
+                    "error", ex.getMessage()
+            ));
+        }
     }
 
 }
