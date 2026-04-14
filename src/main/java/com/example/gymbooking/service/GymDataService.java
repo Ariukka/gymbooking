@@ -6,6 +6,7 @@ import com.example.gymbooking.repository.BookingRepository;
 import com.example.gymbooking.repository.GymCommentRepository;
 import com.example.gymbooking.repository.GymRepository;
 import com.example.gymbooking.repository.SlotRepository;
+import com.example.gymbooking.repository.UserRepository;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
@@ -31,17 +32,20 @@ public class GymDataService {
     private final SlotRepository slotRepository;
     private final BookingRepository bookingRepository;
     private final GymCommentRepository gymCommentRepository;
+    private final UserRepository userRepository;
     private final ObjectMapper objectMapper;
 
     public GymDataService(GymRepository gymRepository,
                           SlotRepository slotRepository,
                           BookingRepository bookingRepository,
                           GymCommentRepository gymCommentRepository,
+                          UserRepository userRepository,
                           ObjectMapper objectMapper) {
         this.gymRepository = gymRepository;
         this.slotRepository = slotRepository;
         this.bookingRepository = bookingRepository;
         this.gymCommentRepository = gymCommentRepository;
+        this.userRepository = userRepository;
         this.objectMapper = objectMapper;
     }
 
@@ -60,9 +64,11 @@ public class GymDataService {
         }
 
         gymCommentRepository.deleteAllInBatch();
-        slotRepository.deleteAllInBatch();
         bookingRepository.deleteAllInBatch();
+        slotRepository.deleteAllInBatch();
+        int clearedUsers = userRepository.clearGymReferences();
         gymRepository.deleteAllInBatch();
+        LOGGER.info("Cleared gym references for {} users before gym import", clearedUsers);
 
         LocalDateTime now = LocalDateTime.now();
         List<Gym> inserted = new ArrayList<>();

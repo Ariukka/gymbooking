@@ -2,6 +2,7 @@ package com.example.gymbooking.repository;
 
 import com.example.gymbooking.model.User;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -46,4 +47,8 @@ public interface UserRepository extends JpaRepository<User, Long> {
     // Find users with their gyms (JPQL)
     @Query("SELECT u FROM User u LEFT JOIN FETCH u.gym WHERE u.id = :userId")
     Optional<User> findUserWithGym(@Param("userId") Long userId);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("UPDATE User u SET u.gym = null WHERE u.gym IS NOT NULL")
+    int clearGymReferences();
 }
