@@ -32,6 +32,8 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers("/api/auth/**", "/auth/**", "/api/appointments/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/bookings/stream").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/comments", "/api/comments/**", "/api/gyms/*/comments/**").permitAll()
                         .requestMatchers("/api/admin/notifications/**", "/api/notifications/admin/**")
                         .hasAnyRole("ADMIN", "SUPER_ADMIN", "GYM_ADMIN")
                         .requestMatchers("/api/admin/**").hasAnyRole("ADMIN", "SUPER_ADMIN")

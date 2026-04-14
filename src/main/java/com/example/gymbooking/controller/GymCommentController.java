@@ -33,7 +33,7 @@ public class GymCommentController {
     @GetMapping({"/api/gyms/{gymId}/comments", "/gyms/{gymId}/comments"})
     public ResponseEntity<?> getGymComments(@PathVariable Long gymId) {
         if (!gymRepository.existsById(gymId)) {
-            return ResponseEntity.notFound().build();
+            return ResponseEntity.ok(List.of());
         }
 
         List<GymComment> comments = gymCommentRepository.findByGymIdOrderByCreatedAtDesc(gymId);

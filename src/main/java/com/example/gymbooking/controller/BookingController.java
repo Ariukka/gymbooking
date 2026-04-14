@@ -20,6 +20,8 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -30,6 +32,7 @@ import java.time.temporal.ChronoUnit;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/bookings")
@@ -64,6 +67,24 @@ public class BookingController {
                         "4. Баталгаажуулалтын мэдээллээ шалгаад захиалгаа баталгаажуулна."
                 )
         ));
+    }
+
+    @GetMapping("/stream")
+    public SseEmitter streamBookingUpdates(@RequestParam Long gymId) {
+        SseEmitter emitter = new SseEmitter(30_000L);
+        try {
+            emitter.send(SseEmitter.event()
+                    .name("booking-update")
+                    .data(Map.of(
+                            "gymId", gymId,
+                            "bookedHoursByDate", getBookedHoursByDate(gymId),
+                            "timestamp", LocalDateTime.now().toString()
+                    )));
+            emitter.complete();
+        } catch (Exception ex) {
+            emitter.completeWithError(ex);
+        }
+        return emitter;
     }
 
     @PostMapping("/check-availability")
@@ -492,6 +513,15 @@ private Slot resolveSlot(CreateBookingRequest request) {
         } catch (DateTimeParseException ignored) {
             return candidate;
         }
+    }
+
+    private Map<String, List<String>> getBookedHoursByDate(Long gymId) {
+        return slotRepository.findByGymId(gymId).stream()
+                .filter(slot -> !slot.isAvailable() || slot.getCurrentBookings() > 0)
+                .collect(Collectors.groupingBy(
+                        slot -> slot.getDate().toString(),
+                        Collectors.mapping(Slot::getTime, Collectors.toList())
+                ));
     }
 
     private boolean isSlotInPast(Slot slot) {
