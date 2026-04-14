@@ -40,7 +40,7 @@ public class GymCommentController {
         return ResponseEntity.ok(comments);
     }
 
-    @GetMapping("/api/comments")
+    @GetMapping({"/api/comments", "/api/comments/", "/comments", "/comments/", "/api/comment", "/api/comment/", "/comment", "/comment/"})
     public ResponseEntity<?> getGymCommentsByQuery(@RequestParam(name = "gymId", required = false) String rawGymId) {
         Long gymId = parseGymId(rawGymId);
         if (gymId == null) {
@@ -56,7 +56,7 @@ public class GymCommentController {
         return createComment(gymId, user, payload);
     }
 
-    @PostMapping("/api/comments")
+    @PostMapping({"/api/comments", "/api/comments/", "/comments", "/comments/", "/api/comment", "/api/comment/", "/comment", "/comment/"})
     public ResponseEntity<?> addComment(@AuthenticationPrincipal User user,
                                         @RequestBody Map<String, String> payload) {
         if (payload == null) {
@@ -91,7 +91,7 @@ public class GymCommentController {
         return ResponseEntity.ok(Map.of("message", "Comment deleted successfully"));
     }
 
-    @DeleteMapping("/api/comments/{commentId}")
+    @DeleteMapping({"/api/comments/{commentId}", "/api/comments/{commentId}/", "/comments/{commentId}", "/comments/{commentId}/", "/api/comment/{commentId}", "/api/comment/{commentId}/", "/comment/{commentId}", "/comment/{commentId}/"})
     public ResponseEntity<?> deleteOwnComment(@PathVariable Long commentId,
                                               @AuthenticationPrincipal User user) {
         if (user == null) {
