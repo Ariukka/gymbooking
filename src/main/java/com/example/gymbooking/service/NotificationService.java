@@ -1,6 +1,8 @@
 package com.example.gymbooking.service;
 
+import com.example.gymbooking.model.Booking;
 import com.example.gymbooking.model.Gym;
+import com.example.gymbooking.model.GymComment;
 import com.example.gymbooking.model.Notification;
 import com.example.gymbooking.model.Payment;
 import com.example.gymbooking.model.User;
@@ -11,8 +13,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 @Service
 public class NotificationService {
@@ -273,6 +277,71 @@ public class NotificationService {
     public long getTotalNotificationCount(Long userId) {
         return notificationRepository.countByUserId(userId);
     }
+
+    @Transactional
+    public void createGymBookingNotificationForAdmins(Booking booking) {
+        if (booking == null || booking.getGym() == null) {
+            return;
+        }
+
+        Gym gym = booking.getGym();
+        Set<Long> recipientIds = resolveGymAdminRecipientIds(gym);
+
+        for (Long recipientId : recipientIds) {
+            createNotification(
+                    recipientId,
+                    "🆕 Танай заалд шинэ захиалга",
+                    String.format("%s хэрэглэгч %s %s цагт \"%s\" заалд захиалга хийлээ.",
+                            booking.getUser() != null ? booking.getUser().getUsername() : "Хэрэглэгч",
+                            booking.getDate(),
+                            booking.getTime(),
+                            gym.getName())
+            );
+        }
+    }
+
+    @Transactional
+    public void createGymCommentNotificationForAdmins(GymComment comment) {
+        if (comment == null || comment.getGym() == null) {
+            return;
+        }
+
+        Gym gym = comment.getGym();
+        Set<Long> recipientIds = resolveGymAdminRecipientIds(gym);
+
+        for (Long recipientId : recipientIds) {
+            createNotification(
+                    recipientId,
+                    "💬 Танай заалд шинэ сэтгэгдэл",
+                    String.format("\"%s\" заалд %s хэрэглэгч сэтгэгдэл үлдээлээ: %s",
+                            gym.getName(),
+                            comment.getUser() != null ? comment.getUser().getUsername() : "Хэрэглэгч",
+                            comment.getComment())
+            );
+        }
+    }
+
+    private Set<Long> resolveGymAdminRecipientIds(Gym gym) {
+        Set<Long> recipientIds = new LinkedHashSet<>();
+
+        if (gym.getOwnerUser() != null && gym.getOwnerUser().getId() != null) {
+            recipientIds.add(gym.getOwnerUser().getId());
+        }
+
+        List<User> gymAdmins = userRepository.findByGym_IdAndRoleIn(
+                gym.getId(),
+                List.of("GYM_ADMIN", "ROLE_GYM_ADMIN")
+        );
+
+        for (User admin : gymAdmins) {
+            if (admin.getId() != null) {
+                recipientIds.add(admin.getId());
+            }
+        }
+
+        return recipientIds;
+    }
+
     @Transactional
     public Notification createPaymentSuccessNotification(Payment payment) {
         if (payment == null) {

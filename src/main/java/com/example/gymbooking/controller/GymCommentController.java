@@ -5,6 +5,7 @@ import com.example.gymbooking.model.GymComment;
 import com.example.gymbooking.model.User;
 import com.example.gymbooking.repository.GymCommentRepository;
 import com.example.gymbooking.repository.GymRepository;
+import com.example.gymbooking.service.NotificationService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -19,10 +20,14 @@ public class GymCommentController {
 
     private final GymCommentRepository gymCommentRepository;
     private final GymRepository gymRepository;
+    private final NotificationService notificationService;
 
-    public GymCommentController(GymCommentRepository gymCommentRepository, GymRepository gymRepository) {
+    public GymCommentController(GymCommentRepository gymCommentRepository,
+                                GymRepository gymRepository,
+                                NotificationService notificationService) {
         this.gymCommentRepository = gymCommentRepository;
         this.gymRepository = gymRepository;
+        this.notificationService = notificationService;
     }
 
     @GetMapping({"/api/gyms/{gymId}/comments", "/gyms/{gymId}/comments"})
@@ -127,6 +132,13 @@ public class GymCommentController {
         comment.setComment(commentText.trim());
 
         GymComment savedComment = gymCommentRepository.save(comment);
+
+        try {
+            notificationService.createGymCommentNotificationForAdmins(savedComment);
+        } catch (RuntimeException ignored) {
+            // Comment үүсэх урсгалыг notification алдаанаас болж таслахгүй.
+        }
+
         return ResponseEntity.ok(savedComment);
     }
 
