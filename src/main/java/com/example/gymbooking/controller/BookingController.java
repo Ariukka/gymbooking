@@ -8,7 +8,6 @@ import com.example.gymbooking.model.User;
 import com.example.gymbooking.repository.BookingRepository;
 import com.example.gymbooking.repository.GymRepository;
 import com.example.gymbooking.repository.SlotRepository;
-import com.example.gymbooking.repository.UserRepository;
 import com.example.gymbooking.service.EmailService;
 import com.example.gymbooking.service.NotificationService;
 import org.springframework.http.ResponseEntity;
@@ -39,20 +38,17 @@ public class BookingController {
     private final BookingRepository bookingRepository;
     private final EmailService emailService;
     private final NotificationService notificationService;
-    private final UserRepository userRepository;
     private final SlotRepository slotRepository;
     private final GymRepository gymRepository;
 
     public BookingController(BookingRepository bookingRepository,
                              EmailService emailService,
                              NotificationService notificationService,
-                             UserRepository userRepository,
                              SlotRepository slotRepository,
                              GymRepository gymRepository) {
         this.bookingRepository = bookingRepository;
         this.emailService = emailService;
         this.notificationService = notificationService;
-        this.userRepository = userRepository;
         this.slotRepository = slotRepository;
         this.gymRepository = gymRepository;
     }
@@ -425,19 +421,7 @@ private Slot resolveSlot(CreateBookingRequest request) {
                     String.format("Таны %s %s цагийн захиалга амжилттай баталгаажлаа.",
                             savedBooking.getDate(), savedBooking.getTime())
             );
-
-            List<User> admins = userRepository.findByRole("ADMIN");
-            for (User admin : admins) {
-                notificationService.createNotification(
-                        admin.getId(),
-                        "🆕 Шинэ захиалга",
-                        String.format("%s хэрэглэгч %s %s цагт \"%s\" заалд захиалга хийлээ.",
-                                currentUser.getUsername(),
-                                savedBooking.getDate(),
-                                savedBooking.getTime(),
-                                savedBooking.getGym() != null ? savedBooking.getGym().getName() : "")
-                );
-            }
+            notificationService.createGymBookingNotificationForAdmins(savedBooking);
         } catch (RuntimeException ignored) {
             // Non-critical failure should not block booking creation.
         }

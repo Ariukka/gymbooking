@@ -636,6 +636,43 @@ public class AdminController {
         return ResponseEntity.ok(admins);
     }
 
+
+    /**
+     * Системийн админ - Gym admin-ийг заалд оноох.
+     */
+    @PutMapping("/gyms/{gymId}/assign-admin/{userId}")
+    public ResponseEntity<Map<String, Object>> assignGymAdminToGym(@PathVariable Long gymId,
+                                                                    @PathVariable Long userId) {
+        Gym gym = gymRepository.findById(gymId).orElse(null);
+        if (gym == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(Map.of("success", false, "message", "Gym олдсонгүй."));
+        }
+
+        User gymAdmin = userRepository.findById(userId).orElse(null);
+        if (gymAdmin == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(Map.of("success", false, "message", "Хэрэглэгч олдсонгүй."));
+        }
+
+        if (!"GYM_ADMIN".equalsIgnoreCase(gymAdmin.getRole()) && !"ROLE_GYM_ADMIN".equalsIgnoreCase(gymAdmin.getRole())) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of("success", false, "message", "Сонгосон хэрэглэгч Gym admin биш байна."));
+        }
+
+        gymAdmin.setGym(gym);
+        User savedAdmin = userRepository.save(gymAdmin);
+
+        return ResponseEntity.ok(Map.of(
+                "success", true,
+                "message", "Gym admin заалд амжилттай оноогдлоо.",
+                "gymId", gym.getId(),
+                "gymName", gym.getName(),
+                "gymAdminId", savedAdmin.getId(),
+                "gymAdminUsername", savedAdmin.getUsername()
+        ));
+    }
+
     /**
      * Системийн админ - gym admin хүсэлтийг батлах.
      */
