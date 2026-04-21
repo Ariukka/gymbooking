@@ -44,6 +44,9 @@ public class Booking {
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 
+    @Column(name = "date")
+    private LocalDate bookingDate;
+
     @Column(name = "confirmed_at")  // Add this field
     private LocalDateTime confirmedAt;
 
@@ -57,6 +60,9 @@ public class Booking {
         }
         if (status == null) {
             status = "PENDING";
+        }
+        if (bookingDate == null && slot != null) {
+            bookingDate = slot.getDate();
         }
     }
 
@@ -88,6 +94,14 @@ public class Booking {
         return slot != null ? slot.getDate() : null;
     }
 
+    public LocalDate getBookingDate() {
+        return bookingDate;
+    }
+
+    public void setBookingDate(LocalDate bookingDate) {
+        this.bookingDate = bookingDate;
+    }
+
     public String getTime() {
         return slot != null ? slot.getTime() : null;
     }
@@ -106,6 +120,9 @@ public class Booking {
 
     public void setSlot(Slot slot) {
         this.slot = slot;
+        if (slot != null) {
+            this.bookingDate = slot.getDate();
+        }
     }
 
     public BigDecimal getTotalPrice() {
