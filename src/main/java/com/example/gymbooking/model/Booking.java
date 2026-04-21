@@ -91,7 +91,14 @@ public class Booking {
     }
 
     public LocalDate getDate() {
-        return slot != null ? slot.getDate() : null;
+        if (slot != null && slot.getDate() != null) {
+            return slot.getDate();
+        }
+        return bookingDate;
+    }
+
+    public void setDate(LocalDate date) {
+        this.bookingDate = date;
     }
 
     public LocalDate getBookingDate() {
