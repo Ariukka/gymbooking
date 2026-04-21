@@ -29,6 +29,9 @@ public class Booking {
     @JsonIgnoreProperties({"gym"})
     private Slot slot;
 
+    @Transient
+    private LocalDate bookingDate;
+
     @Column(name = "total_price", precision = 12, scale = 2)
     private BigDecimal totalPrice;
 
