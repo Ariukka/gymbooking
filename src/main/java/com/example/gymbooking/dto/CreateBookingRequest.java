@@ -2,6 +2,8 @@ package com.example.gymbooking.dto;
 
 import com.fasterxml.jackson.annotation.JsonAlias;
 import com.fasterxml.jackson.annotation.JsonFormat;
+import com.fasterxml.jackson.annotation.JsonIgnore;
+
 import java.math.BigDecimal;
 import java.time.LocalDate;
 
@@ -43,6 +45,19 @@ public class CreateBookingRequest {
 
     public void setDate(LocalDate date) {
         this.date = date;
+    }
+    
+    // Custom setter to handle string date conversion
+    @JsonIgnore
+    public void setDateAsString(String dateString) {
+        if (dateString != null && !dateString.trim().isEmpty()) {
+            try {
+                this.date = LocalDate.parse(dateString.trim());
+            } catch (Exception e) {
+                System.err.println("Failed to parse date: " + dateString + ", error: " + e.getMessage());
+                // Keep date as null if parsing fails
+            }
+        }
     }
 
     public String getTime() {

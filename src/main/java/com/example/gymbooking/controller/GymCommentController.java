@@ -57,6 +57,7 @@ public class GymCommentController {
     }
 
     @PostMapping({"/api/comments", "/api/comments/", "/comments", "/comments/"})
+    @CrossOrigin(origins = "*", allowedHeaders = "*")
     public ResponseEntity<?> addComment(@AuthenticationPrincipal User user,
                                         @RequestBody Map<String, String> payload) {
         if (payload == null) {

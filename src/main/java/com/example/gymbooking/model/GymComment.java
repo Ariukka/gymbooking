@@ -15,7 +15,7 @@ public class GymComment {
 
     @ManyToOne(optional = false)
     @JoinColumn(name = "gym_id")
-    @JsonIgnoreProperties({"ownerUser", "slots", "bookings", "comments"})
+    @JsonIgnoreProperties({"ownerUser", "slots", "bookings", "comments", "createdAt", "updatedAt"})
     private Gym gym;
 
     @ManyToOne(optional = false)

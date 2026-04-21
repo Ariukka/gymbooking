@@ -9,6 +9,7 @@ import java.util.Optional;
 public interface GymRepository extends JpaRepository<Gym, Long> {
     List<Gym> findByOwnerUser(User ownerUser);
     Optional<Gym> findFirstByOwnerUser(User ownerUser);
+    Optional<Gym> findByName(String name);
     List<Gym> findByApprovedTrue();
     List<Gym> findByApprovedTrueAndActiveTrue();
     List<Gym> findByApprovedTrueAndActiveTrueOrderByIdAsc();
@@ -18,4 +19,5 @@ public interface GymRepository extends JpaRepository<Gym, Long> {
     long countByApprovedTrue();
     long countByApprovedFalse();
     boolean existsByOwnerUser(User ownerUser);
+    boolean existsByName(String name);
 }

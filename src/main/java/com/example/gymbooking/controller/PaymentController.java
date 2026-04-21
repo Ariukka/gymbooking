@@ -21,7 +21,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @RestController
-@RequestMapping({"/api/payments", "/api/payment", "/payment"})
+@RequestMapping({"/api/payments", "/api/payment", "/payment", "/api/admin/payments"})
 @CrossOrigin(origins = "http://localhost:3000")
 public class PaymentController {
 
@@ -307,6 +307,16 @@ public class PaymentController {
             booking.setConfirmedAt(LocalDateTime.now());
         }
         bookingRepository.save(booking);
+    }
+
+    @GetMapping("/detailed")
+    public ResponseEntity<?> getDetailedPayments() {
+        List<Payment> payments = paymentRepository.findAllByOrderByCreatedAtDesc();
+        return ResponseEntity.ok(Map.of(
+                "payments", payments,
+                "count", payments.size(),
+                "message", "Detailed payments retrieved successfully"
+        ));
     }
 
     private void markBookingCancelled(Booking booking) {

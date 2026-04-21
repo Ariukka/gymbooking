@@ -21,7 +21,6 @@ public class DatabaseMaintenanceService {
             "members",
             "notifications",
             "gym_comments",
-            "invoices",
             "audit_logs",
             "otp_codes"
     );
@@ -52,5 +51,9 @@ public class DatabaseMaintenanceService {
                 log.warn("Skipping auto increment sync for table {}: {}", tableName, ex.getMessage());
             }
         }
+    }
+
+    public JdbcTemplate getJdbcTemplate() {
+        return jdbcTemplate;
     }
 }

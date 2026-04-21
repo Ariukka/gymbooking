@@ -7,6 +7,7 @@ import org.springframework.data.repository.query.Param;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
 public interface PaymentRepository extends JpaRepository<Payment, Long> {
@@ -38,4 +39,7 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
             @Param("startDateTime") LocalDateTime startDateTime,
             @Param("endDateTime") LocalDateTime endDateTime
     );
+
+    // Find all payments ordered by creation date (newest first)
+    List<Payment> findAllByOrderByCreatedAtDesc();
 }

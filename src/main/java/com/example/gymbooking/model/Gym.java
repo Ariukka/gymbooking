@@ -3,6 +3,7 @@ package com.example.gymbooking.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -21,6 +22,12 @@ public class Gym {
 
     @Column(length = 1000)
     private String description;
+
+    @Column(length = 500)
+    private String img;
+
+    @Column(precision = 3, scale = 2)
+    private BigDecimal rating;
 
     @Column(name = "phone")
     private String phone;
@@ -51,12 +58,15 @@ public class Gym {
     private LocalDateTime approvedAt;
 
     @OneToMany(mappedBy = "gym", cascade = CascadeType.ALL)
+    @JsonIgnoreProperties({"gym"})
     private List<Slot> slots;
 
     @OneToMany(mappedBy = "gym", cascade = CascadeType.ALL)
+    @JsonIgnoreProperties({"gym"})
     private List<Booking> bookings;
 
     @OneToMany(mappedBy = "gym", cascade = CascadeType.ALL)
+    @JsonIgnoreProperties({"gym"})
     private List<GymComment> comments;
 
     @Column(name = "created_at")
@@ -116,6 +126,22 @@ public class Gym {
 
     public void setDescription(String description) {
         this.description = description;
+    }
+
+    public String getImg() {
+        return img;
+    }
+
+    public void setImg(String img) {
+        this.img = img;
+    }
+
+    public BigDecimal getRating() {
+        return rating;
+    }
+
+    public void setRating(BigDecimal rating) {
+        this.rating = rating;
     }
 
     public String getPhone() {

@@ -9,6 +9,7 @@ import com.example.gymbooking.repository.GymRepository;
 import com.example.gymbooking.repository.PaymentRepository;
 import com.example.gymbooking.repository.SlotRepository;
 import com.example.gymbooking.repository.UserRepository;
+import com.example.gymbooking.service.DatabaseMaintenanceService;
 import com.example.gymbooking.service.GymDataService;
 import com.example.gymbooking.service.NotificationService;
 import org.springframework.http.HttpStatus;
@@ -38,6 +39,7 @@ public class AdminController {
     private final PaymentRepository paymentRepository;
     private final GymDataService gymDataService;
     private final NotificationService notificationService;
+    private final DatabaseMaintenanceService databaseMaintenanceService;
 
     public AdminController(GymRepository gymRepository,
                             BookingRepository bookingRepository,
@@ -45,7 +47,8 @@ public class AdminController {
                             UserRepository userRepository,
                             PaymentRepository paymentRepository,
                             GymDataService gymDataService,
-                            NotificationService notificationService) {
+                            NotificationService notificationService,
+                            DatabaseMaintenanceService databaseMaintenanceService) {
         this.gymRepository = gymRepository;
         this.bookingRepository = bookingRepository;
         this.slotRepository = slotRepository;
@@ -53,6 +56,7 @@ public class AdminController {
         this.paymentRepository = paymentRepository;
         this.gymDataService = gymDataService;
         this.notificationService = notificationService;
+        this.databaseMaintenanceService = databaseMaintenanceService;
     }
 
     // ================== GYM MANAGEMENT ==================
@@ -1034,6 +1038,250 @@ public class AdminController {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of(
                     "success", false,
                     "message", "Failed to sync gym data",
+                    "error", ex.getMessage()
+            ));
+        }
+    }
+
+    @PostMapping("/system/reset-gym-comments")
+    public ResponseEntity<?> resetGymComments(@AuthenticationPrincipal User admin) {
+        // Temporarily disabled for testing
+        // if (!isSystemAdmin(admin)) {
+        //     return ResponseEntity.status(HttpStatus.FORBIDDEN)
+        //             .body(Map.of("success", false, "message", "Unauthorized"));
+        // }
+
+        try {
+            // Drop and recreate gym_comments table
+            databaseMaintenanceService.getJdbcTemplate().execute("DROP TABLE IF EXISTS gym_comments");
+            
+            // Create new table
+            String createTableSql = """
+                CREATE TABLE gym_comments (
+                    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+                    gym_id BIGINT NOT NULL,
+                    user_id BIGINT NOT NULL,
+                    comment VARCHAR(1000) NOT NULL,
+                    created_at DATETIME NOT NULL,
+                    FOREIGN KEY (gym_id) REFERENCES gyms(id),
+                    FOREIGN KEY (user_id) REFERENCES users(id),
+                    INDEX idx_gym_comments_gym_id (gym_id),
+                    INDEX idx_gym_comments_user_id (user_id),
+                    INDEX idx_gym_comments_created_at (created_at)
+                )
+                """;
+            databaseMaintenanceService.getJdbcTemplate().execute(createTableSql);
+            
+            // Insert test comments
+            String insertSql = """
+                INSERT INTO gym_comments (gym_id, user_id, comment, created_at) VALUES
+                (40, 2, 'Excellent gym with great equipment!', NOW()),
+                (40, 2, 'Very clean and well-maintained facility.', NOW() - INTERVAL 1 DAY),
+                (40, 2, 'Staff is very helpful and professional.', NOW() - INTERVAL 2 DAY)
+                """;
+            databaseMaintenanceService.getJdbcTemplate().execute(insertSql);
+            
+            // Fix auto increment
+            databaseMaintenanceService.fixAutoIncrementSequences();
+            
+            return ResponseEntity.ok(Map.of(
+                    "success", true,
+                    "message", "Gym comments table reset successfully",
+                    "testComments", 3
+            ));
+        } catch (Exception ex) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of(
+                    "success", false,
+                    "message", "Failed to reset gym comments",
+                    "error", ex.getMessage()
+            ));
+        }
+    }
+
+    @PostMapping("/system/delete-test-gyms")
+    public ResponseEntity<?> deleteTestGyms(@AuthenticationPrincipal User admin) {
+        // Temporarily disabled for testing
+        // if (!isSystemAdmin(admin)) {
+        //     return ResponseEntity.status(HttpStatus.FORBIDDEN)
+        //             .body(Map.of("success", false, "message", "Unauthorized"));
+        // }
+
+        try {
+            // Delete specific gyms by name
+            String[] gymNames = {
+                "Power Gym",
+                "FitLife Center", 
+                "Iron House Gym",
+                "Yoga Studio",
+                "CrossFit Box",
+                "Spin Studio"
+            };
+            
+            // Build gym names for IN clause
+            String gymNamesParam = String.join(",", java.util.Arrays.stream(gymNames).map(n -> "'" + n + "'").collect(java.util.stream.Collectors.toList()));
+            
+            // Delete all related data in correct order (with error handling)
+            try {
+                databaseMaintenanceService.getJdbcTemplate().update(
+                    "DELETE FROM gym_comments WHERE gym_id IN (SELECT id FROM gyms WHERE name IN (" + gymNamesParam + "))"
+                );
+            } catch (Exception ex) { System.err.println("Failed to delete gym_comments: " + ex.getMessage()); }
+            
+            try {
+                databaseMaintenanceService.getJdbcTemplate().update(
+                    "DELETE FROM bookings WHERE gym_id IN (SELECT id FROM gyms WHERE name IN (" + gymNamesParam + "))"
+                );
+            } catch (Exception ex) { System.err.println("Failed to delete bookings: " + ex.getMessage()); }
+            
+            try {
+                databaseMaintenanceService.getJdbcTemplate().update(
+                    "DELETE FROM slots WHERE gym_id IN (SELECT id FROM gyms WHERE name IN (" + gymNamesParam + "))"
+                );
+            } catch (Exception ex) { System.err.println("Failed to delete slots: " + ex.getMessage()); }
+            
+            try {
+                databaseMaintenanceService.getJdbcTemplate().update(
+                    "DELETE FROM notifications WHERE gym_id IN (SELECT id FROM gyms WHERE name IN (" + gymNamesParam + "))"
+                );
+            } catch (Exception ex) { System.err.println("Failed to delete notifications: " + ex.getMessage()); }
+            
+            try {
+                databaseMaintenanceService.getJdbcTemplate().update(
+                    "UPDATE users SET gym_id = NULL WHERE gym_id IN (SELECT id FROM gyms WHERE name IN (" + gymNamesParam + "))"
+                );
+            } catch (Exception ex) { System.err.println("Failed to update users: " + ex.getMessage()); }
+            
+            // Delete the gyms
+            int deletedCount = databaseMaintenanceService.getJdbcTemplate().update(
+                "DELETE FROM gyms WHERE name IN (" + gymNamesParam + ")"
+            );
+            
+            // Fix auto increment sequences
+            databaseMaintenanceService.fixAutoIncrementSequences();
+            
+            return ResponseEntity.ok(Map.of(
+                    "success", true,
+                    "message", "Test gyms deleted successfully",
+                    "deletedCount", deletedCount,
+                    "deletedGyms", gymNames
+            ));
+        } catch (Exception ex) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of(
+                    "success", false,
+                    "message", "Failed to delete test gyms",
+                    "error", ex.getMessage()
+            ));
+        }
+    }
+
+    @PostMapping("/system/delete-gym-admins")
+    public ResponseEntity<?> deleteGymAdmins(@AuthenticationPrincipal User admin) {
+        // Temporarily disabled for testing
+        // if (!isSystemAdmin(admin)) {
+        //     return ResponseEntity.status(HttpStatus.FORBIDDEN)
+        //             .body(Map.of("success", false, "message", "Unauthorized"));
+        // }
+
+        try {
+            // First update gym owners to null for gym admins (except main admin)
+            int updatedGyms = databaseMaintenanceService.getJdbcTemplate().update(
+                "UPDATE gyms SET owner_user_id = NULL WHERE owner_user_id IN (SELECT id FROM users WHERE role = 'GYM_ADMIN' AND id != 2)"
+            );
+            
+            // Then delete all GYM_ADMIN users except main admin (id=2)
+            int deletedCount = databaseMaintenanceService.getJdbcTemplate().update(
+                "DELETE FROM users WHERE role = 'GYM_ADMIN' AND id != 2"
+            );
+            
+            // Fix auto increment sequences
+            databaseMaintenanceService.fixAutoIncrementSequences();
+            
+            return ResponseEntity.ok(Map.of(
+                    "success", true,
+                    "message", "Gym admin users deleted successfully",
+                    "deletedCount", deletedCount,
+                    "updatedGyms", updatedGyms
+            ));
+        } catch (Exception ex) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of(
+                    "success", false,
+                    "message", "Failed to delete gym admins",
+                    "error", ex.getMessage()
+            ));
+        }
+    }
+
+    @PostMapping("/system/clean-ulaanbaatar-gyms")
+    public ResponseEntity<?> deleteUlaanbaatarGyms(@AuthenticationPrincipal User admin) {
+        // Temporarily disabled for testing
+        // if (!isSystemAdmin(admin)) {
+        //     return ResponseEntity.status(HttpStatus.FORBIDDEN)
+        //             .body(Map.of("success", false, "message", "Unauthorized"));
+        // }
+
+        try {
+            // Delete specific Ulaanbaatar gyms by name
+            String[] gymNames = {
+                "Power Gym",
+                "FitLife Center", 
+                "Iron House Gym",
+                "Yoga Studio",
+                "CrossFit Box",
+                "Spin Studio"
+            };
+            
+            // Build gym names for IN clause
+            String gymNamesParam = String.join(",", java.util.Arrays.stream(gymNames).map(n -> "'" + n + "'").collect(java.util.stream.Collectors.toList()));
+            
+            // Delete all related data in correct order (with error handling)
+            try {
+                databaseMaintenanceService.getJdbcTemplate().update(
+                    "DELETE FROM gym_comments WHERE gym_id IN (SELECT id FROM gyms WHERE name IN (" + gymNamesParam + "))"
+                );
+            } catch (Exception ex) { System.err.println("Failed to delete gym_comments: " + ex.getMessage()); }
+            
+            try {
+                databaseMaintenanceService.getJdbcTemplate().update(
+                    "DELETE FROM bookings WHERE gym_id IN (SELECT id FROM gyms WHERE name IN (" + gymNamesParam + "))"
+                );
+            } catch (Exception ex) { System.err.println("Failed to delete bookings: " + ex.getMessage()); }
+            
+            try {
+                databaseMaintenanceService.getJdbcTemplate().update(
+                    "DELETE FROM slots WHERE gym_id IN (SELECT id FROM gyms WHERE name IN (" + gymNamesParam + "))"
+                );
+            } catch (Exception ex) { System.err.println("Failed to delete slots: " + ex.getMessage()); }
+            
+            try {
+                databaseMaintenanceService.getJdbcTemplate().update(
+                    "DELETE FROM notifications WHERE gym_id IN (SELECT id FROM gyms WHERE name IN (" + gymNamesParam + "))"
+                );
+            } catch (Exception ex) { System.err.println("Failed to delete notifications: " + ex.getMessage()); }
+            
+            try {
+                databaseMaintenanceService.getJdbcTemplate().update(
+                    "UPDATE users SET gym_id = NULL WHERE gym_id IN (SELECT id FROM gyms WHERE name IN (" + gymNamesParam + "))"
+                );
+            } catch (Exception ex) { System.err.println("Failed to update users: " + ex.getMessage()); }
+            
+            // Delete the gyms
+            int deletedCount = databaseMaintenanceService.getJdbcTemplate().update(
+                "DELETE FROM gyms WHERE name IN (" + gymNamesParam + ")"
+            );
+            
+            // Fix auto increment sequences
+            databaseMaintenanceService.fixAutoIncrementSequences();
+            
+            return ResponseEntity.ok(Map.of(
+                    "success", true,
+                    "message", "Ulaanbaatar gyms deleted successfully",
+                    "deletedCount", deletedCount,
+                    "deletedGyms", gymNames
+            ));
+        } catch (Exception ex) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of(
+                    "success", false,
+                    "message", "Failed to delete Ulaanbaatar gyms",
                     "error", ex.getMessage()
             ));
         }

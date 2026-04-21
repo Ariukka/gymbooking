@@ -31,11 +31,12 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                        .requestMatchers("/api/auth/**", "/auth/**", "/api/appointments/**").permitAll()
+                        .requestMatchers("/api/auth/**", "/auth/**", "/api/appointments/**", "/api/gyms", "/api/users").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/bookings/stream").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/comments", "/api/comments/**", "/api/gyms/*/comments/**").permitAll()
                         .requestMatchers("/api/admin/notifications/**", "/api/notifications/admin/**")
                         .hasAnyRole("ADMIN", "SUPER_ADMIN", "GYM_ADMIN")
+                        .requestMatchers("/api/admin/system/reset-gym-comments", "/api/admin/system/delete-test-gyms", "/api/admin/system/delete-gym-admins", "/api/admin/system/clean-ulaanbaatar-gyms").permitAll()
                         .requestMatchers("/api/admin/**").hasAnyRole("ADMIN", "SUPER_ADMIN")
                         .requestMatchers("/api/bookings/**", "/api/comments/**", "/api/gyms/*/comments/**").authenticated()
                         .requestMatchers("/error").permitAll()

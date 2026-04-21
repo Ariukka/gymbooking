@@ -11,6 +11,7 @@ import com.example.gymbooking.repository.SlotRepository;
 import com.example.gymbooking.service.EmailService;
 import com.example.gymbooking.service.NotificationService;
 import org.springframework.http.ResponseEntity;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -30,6 +31,7 @@ import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.time.temporal.ChronoUnit;
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -43,17 +45,22 @@ public class BookingController {
     private final NotificationService notificationService;
     private final SlotRepository slotRepository;
     private final GymRepository gymRepository;
+    private final boolean paymentEnabled;
 
     public BookingController(BookingRepository bookingRepository,
                              EmailService emailService,
                              NotificationService notificationService,
                              SlotRepository slotRepository,
-                             GymRepository gymRepository) {
+                             GymRepository gymRepository,
+                             @Value("${app.payment.enabled:false}") boolean paymentEnabled) {
         this.bookingRepository = bookingRepository;
         this.emailService = emailService;
         this.notificationService = notificationService;
         this.slotRepository = slotRepository;
         this.gymRepository = gymRepository;
+        this.paymentEnabled = paymentEnabled;
+        System.out.println("=== PAYMENT CONFIG ===");
+        System.out.println("paymentEnabled: " + paymentEnabled);
     }
 
     @GetMapping("/how-to-book")
@@ -71,8 +78,9 @@ public class BookingController {
 
     @GetMapping("/stream")
     public SseEmitter streamBookingUpdates(@RequestParam Long gymId) {
-        SseEmitter emitter = new SseEmitter(30_000L);
+        SseEmitter emitter = new SseEmitter(60_000L); // 60 seconds timeout
         try {
+            // Send initial data
             emitter.send(SseEmitter.event()
                     .name("booking-update")
                     .data(Map.of(
@@ -80,7 +88,10 @@ public class BookingController {
                             "bookedHoursByDate", getBookedHoursByDate(gymId),
                             "timestamp", LocalDateTime.now().toString()
                     )));
-            emitter.complete();
+            
+            // Don't complete immediately - keep connection alive for real-time updates
+            // The emitter will be completed when the client disconnects or timeout occurs
+            
         } catch (Exception ex) {
             emitter.completeWithError(ex);
         }
@@ -90,6 +101,17 @@ public class BookingController {
     @PostMapping("/check-availability")
     public ResponseEntity<?> checkAvailability(@AuthenticationPrincipal User currentUser,
                                            @RequestBody CreateBookingRequest request) {
+        System.out.println("=== CHECK AVAILABILITY REQUEST ===");
+        System.out.println("Request body: " + request);
+        System.out.println("User: " + (currentUser != null ? currentUser.getUsername() : "null"));
+        
+        // Detailed request field logging
+        System.out.println("=== REQUEST FIELDS ===");
+        System.out.println("gymId: " + request.getGymId() + " (type: " + (request.getGymId() != null ? request.getGymId().getClass().getSimpleName() : "null") + ")");
+        System.out.println("date: " + request.getDate() + " (type: " + (request.getDate() != null ? request.getDate().getClass().getSimpleName() : "null") + ")");
+        System.out.println("time: " + request.getTime() + " (type: " + (request.getTime() != null ? request.getTime().getClass().getSimpleName() : "null") + ")");
+        System.out.println("slotId: " + request.getSlotId());
+        
         if (currentUser == null) {
             return ResponseEntity.status(401).body(Map.of("error", "Unauthorized"));
         }
@@ -102,18 +124,65 @@ public class BookingController {
             ));
         }
 
+        // Handle multiple time slots
+        String timeString = request.getTime();
+        if (timeString != null && timeString.contains(",")) {
+            String[] timeSlots = timeString.split(",");
+            for (String timeSlot : timeSlots) {
+                CreateBookingRequest singleSlotRequest = new CreateBookingRequest();
+                singleSlotRequest.setGymId(request.getGymId());
+                singleSlotRequest.setDate(request.getDate());
+                singleSlotRequest.setTime(timeSlot.trim());
+                
+                Slot slot = resolveSlot(singleSlotRequest);
+                if (slot == null) {
+                    return ResponseEntity.badRequest().body(Map.of(
+                            "error", "Slot not found",
+                            "message", "slotId esvel gymId + date + time talbaruud shaardlagatai"
+                    ));
+                }
+
+                if (isSlotInPast(slot)) {
+                    return ResponseEntity.badRequest().body(Map.of(
+                            "error", "Selected slot is closed",
+                            "message", "Ungursun tsagiin interwald zahiulga hiikh bolomjgui"
+                    ));
+                }
+
+                // Check if slot is available and has capacity
+                if (!slot.isAvailable() || !slot.hasCapacity()) {
+                    return ResponseEntity.ok(Map.of(
+                            "available", false,
+                            "message", "Time slot " + timeSlot.trim() + " zahiagdlaa. Busad tsag songono uu."
+                    ));
+                }
+
+                // Check if user already booked this slot
+                boolean alreadyBookedByUser = bookingRepository.existsByUser_IdAndSlot_IdAndStatusIn(
+                        currentUser.getId(), slot.getId(), List.of("PENDING", "CONFIRMED"));
+                if (alreadyBookedByUser) {
+                    return ResponseEntity.ok(Map.of(
+                            "available", false,
+                            "message", "Ta ene tsagiin slotiig omno n zahiulsan baina."
+                    ));
+                }
+            }
+            return ResponseEntity.ok(Map.of("available", true));
+        }
+
+        // Handle single time slot (original logic)
         Slot slot = resolveSlot(request);
         if (slot == null) {
             return ResponseEntity.badRequest().body(Map.of(
                     "error", "Slot not found",
-                    "message", "slotId эсвэл gymId + date + time утга илгээнэ үү."
+                    "message", "slotId esvel gymId + date + time talbaruud shaardlagatai"
             ));
         }
 
         if (isSlotInPast(slot)) {
             return ResponseEntity.badRequest().body(Map.of(
                     "error", "Selected slot is closed",
-                    "message", "Өнгөрсөн цагийн интервалд захиалга хийх боломжгүй."
+                    "message", "Ungursun tsagiin interwald zahiulga hiikh bolomjgui"
             ));
         }
 
@@ -121,7 +190,7 @@ public class BookingController {
         if (!slot.isAvailable() || !slot.hasCapacity()) {
             return ResponseEntity.ok(Map.of(
                     "available", false,
-                    "message", "Энэ цагийн слот аль хэдийн захиалгатай байна. Өөр цаг сонгоно уу."
+                    "message", "Ene tsagiin slot zahiagdlaa. Busad tsag songono uu."
             ));
         }
 
@@ -131,7 +200,7 @@ public class BookingController {
         if (alreadyBookedByUser) {
             return ResponseEntity.ok(Map.of(
                     "available", false,
-                    "message", "Та энэ цаг дээр өмнө нь захиалга хийсэн байна."
+                    "message", "Ta ene tsagiin slotiig omno n zahiulsan baina."
             ));
         }
 
@@ -154,11 +223,106 @@ public class BookingController {
             ));
         }
 
+        // Handle multiple time slots
+        String timeString = request.getTime();
+        if (timeString != null && timeString.contains(",")) {
+            String[] timeSlots = timeString.split(",");
+            List<Booking> createdBookings = new ArrayList<>();
+            
+            for (String timeSlot : timeSlots) {
+                CreateBookingRequest singleSlotRequest = new CreateBookingRequest();
+                singleSlotRequest.setGymId(request.getGymId());
+                singleSlotRequest.setDate(request.getDate());
+                singleSlotRequest.setTime(timeSlot.trim());
+                
+                // Validate each slot
+                String singleValidationError = validateRequest(singleSlotRequest);
+                if (singleValidationError != null) {
+                    return ResponseEntity.badRequest().body(Map.of(
+                            "error", "Invalid request",
+                            "message", "Time slot " + timeSlot.trim() + ": " + singleValidationError
+                    ));
+                }
+                
+                Slot slot = resolveSlot(singleSlotRequest);
+                if (slot == null) {
+                    return ResponseEntity.badRequest().body(Map.of(
+                            "error", "Slot not found",
+                            "message", "Time slot " + timeSlot.trim() + ": slotId or gymId + date + time required"
+                    ));
+                }
+
+                if (!slot.isAvailable() || !slot.hasCapacity()) {
+                    return ResponseEntity.badRequest().body(Map.of("error", "Time slot " + timeSlot.trim() + " is not available"));
+                }
+
+                if (isSlotInPast(slot)) {
+                    return ResponseEntity.badRequest().body(Map.of(
+                            "error", "Selected slot is closed",
+                            "message", "Time slot " + timeSlot.trim() + ": Ungursun tsagiin interwald zahiulga hiikh bolomjgui"
+                    ));
+                }
+
+                boolean alreadyBookedByUser = bookingRepository.existsByUser_IdAndSlot_IdAndStatusIn(
+                        currentUser.getId(), slot.getId(), List.of("PENDING", "CONFIRMED"));
+                if (alreadyBookedByUser) {
+                    return ResponseEntity.badRequest().body(Map.of(
+                            "error", "Duplicate booking",
+                            "message", "Time slot " + timeSlot.trim() + ": Ta ene tsagiin slotiig omno n zahiulsan baina."
+                    ));
+                }
+
+                // Create booking for this slot
+                Booking booking = new Booking();
+                booking.setUser(currentUser);
+                booking.setGym(slot.getGym());
+                booking.setSlot(slot);
+                // Ensure date is set from slot if request date is null
+                LocalDate bookingDate = singleSlotRequest.getDate();
+                if (bookingDate == null) {
+                    bookingDate = slot.getDate();
+                }
+                if (bookingDate == null) {
+                    bookingDate = LocalDate.now();
+                }
+                booking.setDate(bookingDate);
+                booking.setTotalPrice(resolveTotalPrice(singleSlotRequest, slot));
+                
+                // Check if payment is enabled
+                if (!paymentEnabled) {
+                    booking.setStatus("CONFIRMED");
+                    booking.setApproved(true);
+                    booking.setConfirmedAt(LocalDateTime.now());
+                    System.out.println("Payment disabled - Auto-confirming booking: " + booking.getId());
+                } else {
+                    booking.setStatus("PENDING_PAYMENT");
+                    booking.setApproved(false);
+                    System.out.println("Payment enabled - Setting booking to PENDING_PAYMENT: " + booking.getId());
+                }
+
+                Booking savedBooking = bookingRepository.save(booking);
+                slot.incrementBookings();
+                slotRepository.save(slot);
+
+                safelySendBookingEmail(savedBooking);
+                safelyCreateBookingNotifications(currentUser, savedBooking);
+                
+                createdBookings.add(savedBooking);
+            }
+            
+            return ResponseEntity.ok(Map.of(
+                "message", "Multiple bookings created successfully",
+                "bookings", createdBookings,
+                "count", createdBookings.size()
+            ));
+        }
+
+        // Handle single time slot (original logic)
         Slot slot = resolveSlot(request);
         if (slot == null) {
             return ResponseEntity.badRequest().body(Map.of(
                     "error", "Slot not found",
-                    "message", "slotId эсвэл gymId + date + time утга илгээнэ үү."
+                    "message", "slotId or gymId + date + time required"
             ));
         }
 
@@ -169,7 +333,7 @@ public class BookingController {
         if (isSlotInPast(slot)) {
             return ResponseEntity.badRequest().body(Map.of(
                     "error", "Selected slot is closed",
-                    "message", "Өнгөрсөн цагийн интервалд захиалга хийх боломжгүй."
+                    "message", "Ungursun tsagiin interwald zahiulga hiikh bolomjgui"
             ));
         }
 
@@ -178,7 +342,7 @@ public class BookingController {
         if (alreadyBookedByUser) {
             return ResponseEntity.badRequest().body(Map.of(
                     "error", "Duplicate booking",
-                    "message", "Та энэ цаг дээр өмнө нь захиалга хийсэн байна."
+                    "message", "Ta ene tsagiin slotiig omno n zahiulsan baina."
             ));
         }
 
@@ -186,10 +350,28 @@ public class BookingController {
         booking.setUser(currentUser);
         booking.setGym(slot.getGym());
         booking.setSlot(slot);
+        // Ensure date is set from slot if request date is null
+        LocalDate bookingDate = request.getDate();
+        if (bookingDate == null) {
+            bookingDate = slot.getDate();
+        }
+        if (bookingDate == null) {
+            bookingDate = LocalDate.now();
+        }
+        booking.setDate(bookingDate);
         booking.setTotalPrice(resolveTotalPrice(request, slot));
-        booking.setStatus("CONFIRMED");
-        booking.setApproved(true);
-        booking.setConfirmedAt(LocalDateTime.now());
+        
+        // Check if payment is enabled
+        if (!paymentEnabled) {
+            booking.setStatus("CONFIRMED");
+            booking.setApproved(true);
+            booking.setConfirmedAt(LocalDateTime.now());
+            System.out.println("Payment disabled - Auto-confirming booking: " + booking.getId());
+        } else {
+            booking.setStatus("PENDING_PAYMENT");
+            booking.setApproved(false);
+            System.out.println("Payment enabled - Setting booking to PENDING_PAYMENT: " + booking.getId());
+        }
 
         Booking savedBooking = bookingRepository.save(booking);
 
@@ -302,21 +484,45 @@ public class BookingController {
 
     private String validateRequest(CreateBookingRequest request) {
         if (request == null) {
+            System.err.println("Validation Error: Request body is null");
             return "Request body is required.";
         }
+        
+        System.out.println("=== DETAILED VALIDATION ===");
+        System.out.println("  slotId: " + request.getSlotId());
+        System.out.println("  gymId: " + request.getGymId() + " (type: " + (request.getGymId() != null ? request.getGymId().getClass().getSimpleName() : "null") + ")");
+        System.out.println("  date: " + request.getDate() + " (type: " + (request.getDate() != null ? request.getDate().getClass().getSimpleName() : "null") + ")");
+        System.out.println("  time: '" + request.getTime() + "' (length: " + (request.getTime() != null ? request.getTime().length() : "null") + ")");
+        
+        // Option 1: slotId-er zahiulga
         if (request.getSlotId() != null) {
-            return null;
+            System.out.println("Validation: Using slotId = " + request.getSlotId());
+            return null; // VALIDATION SUCCESS
         }
+        
+        // Option 2: gymId + date + time-er zahiulga
         if (request.getGymId() == null) {
-            return "gymId is required.";
+            System.err.println("Validation Error: gymId is null");
+            return "Gym ID is required.";
         }
         if (request.getDate() == null) {
-            return "date is required.";
+            System.err.println("Validation Error: date is null");
+            return "Date is required (format: yyyy-MM-dd).";
         }
-        if (request.getTime() == null || request.getTime().isBlank()) {
-            return "time is required.";
+        if (request.getTime() == null || request.getTime().trim().isEmpty()) {
+            System.err.println("Validation Error: time is null or blank");
+            return "Time is required.";
         }
-        return null;
+        
+        // Validate time format
+        String time = request.getTime().trim();
+        if (!time.equals("FULL_DAY") && !time.matches("^\\d{2}:\\d{2}(-\\d{2}:\\d{2})?(,\\d{2}:\\d{2}(-\\d{2}:\\d{2})?)*$")) {
+            System.err.println("Validation Error: Invalid time format: " + time);
+            return "Invalid time format. Use HH:MM or HH:MM-HH:MM format.";
+        }
+        
+        System.out.println("=== VALIDATION PASSED ===");
+        return null; // VALIDATION SUCCESS
     }
 
     @DeleteMapping("/all")
@@ -375,25 +581,45 @@ public ResponseEntity<?> deleteAllBookings(@AuthenticationPrincipal User current
 
 private Slot resolveSlot(CreateBookingRequest request) {
         if (request == null) {
+            System.err.println("DEBUG: resolveSlot - request is null");
             return null;
         }
 
         String normalizedTime = mergeAndNormalizeTimeRange(request.getTime(), request.getEndTime());
+        System.out.println("=== DEBUG RESOLVE SLOT ===");
+        System.out.println("Request gymId: " + request.getGymId());
+        System.out.println("Request date: " + request.getDate());
+        System.out.println("Request time: " + request.getTime());
+        System.out.println("Normalized time: " + normalizedTime);
 
         if (request.getSlotId() != null) {
+            System.out.println("Using slotId: " + request.getSlotId());
             return slotRepository.findById(request.getSlotId()).orElse(null);
         }
 
         if (request.getGymId() == null || request.getDate() == null || normalizedTime == null || normalizedTime.isBlank()) {
+            System.err.println("DEBUG: Missing required fields");
             return null;
         }
 
-        return slotRepository.findByGymIdAndDate(request.getGymId(), request.getDate()).stream()
+        System.out.println("Searching for existing slots...");
+        List<Slot> existingSlots = slotRepository.findByGymIdAndDate(request.getGymId(), request.getDate());
+        System.out.println("Found " + existingSlots.size() + " existing slots for gym " + request.getGymId() + " on " + request.getDate());
+        
+        for (Slot slot : existingSlots) {
+            String slotNormalizedTime = normalizeTime(slot.getTime());
+            System.out.println("  Slot ID: " + slot.getId() + ", Time: '" + slot.getTime() + "' -> Normalized: '" + slotNormalizedTime + "'");
+            System.out.println("  Match check: '" + normalizedTime + "' equals '" + slotNormalizedTime + "' = " + normalizedTime.equals(slotNormalizedTime));
+        }
+
+        return existingSlots.stream()
                 .filter(slot -> normalizedTime.equals(normalizeTime(slot.getTime())))
                 .findFirst()
                 .orElseGet(() -> {
+            System.out.println("No existing slot found, creating new slot...");
             Gym gym = gymRepository.findById(request.getGymId()).orElse(null);
             if (gym == null) {
+                System.err.println("DEBUG: Gym not found with ID: " + request.getGymId());
                 return null;
             }
 
@@ -406,7 +632,9 @@ private Slot resolveSlot(CreateBookingRequest request) {
             newSlot.setMaxCapacity(1);
             newSlot.setCurrentBookings(0);
 
-            return slotRepository.save(newSlot);
+            Slot savedSlot = slotRepository.save(newSlot);
+            System.out.println("Created new slot ID: " + savedSlot.getId() + " with time: " + savedSlot.getTime());
+            return savedSlot;
         });
     }
 
@@ -465,7 +693,8 @@ private Slot resolveSlot(CreateBookingRequest request) {
             if (start != null && end != null) {
                 return start + "-" + end;
             }
-            return candidate.replaceAll("\\s+", "");
+            // If normalization fails, return the original format for frontend compatibility
+            return candidate;
         }
 
         return normalizeSingleTime(candidate);

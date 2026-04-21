@@ -29,6 +29,9 @@ public class Booking {
     @JsonIgnoreProperties({"gym"})
     private Slot slot;
 
+    @Column(name = "booking_date", nullable = false, columnDefinition = "DATE")
+    private LocalDate date;
+
     @Column(name = "total_price", precision = 12, scale = 2)
     private BigDecimal totalPrice;
 
@@ -58,6 +61,14 @@ public class Booking {
         if (status == null) {
             status = "PENDING";
         }
+        // Ensure date is always set
+        if (date == null) {
+            if (slot != null && slot.getDate() != null) {
+                date = slot.getDate();
+            } else {
+                date = LocalDate.now();
+            }
+        }
     }
 
     // Constructors
@@ -85,11 +96,15 @@ public class Booking {
     }
 
     public LocalDate getDate() {
-        return slot != null ? slot.getDate() : null;
+        return date != null ? date : (slot != null ? slot.getDate() : null);
     }
 
     public String getTime() {
         return slot != null ? slot.getTime() : null;
+    }
+
+    public void setDate(LocalDate date) {
+        this.date = date;
     }
 
     public Gym getGym() {
