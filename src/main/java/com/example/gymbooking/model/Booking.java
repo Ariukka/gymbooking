@@ -29,8 +29,8 @@ public class Booking {
     @JsonIgnoreProperties({"gym"})
     private Slot slot;
 
-    @Transient
-    private LocalDate bookingDate;
+    @Column(name = "date", nullable = false)
+    private LocalDate date;
 
     @Column(name = "total_price", precision = 12, scale = 2)
     private BigDecimal totalPrice;
@@ -61,6 +61,9 @@ public class Booking {
         if (status == null) {
             status = "PENDING";
         }
+        if (date == null && slot != null) {
+            date = slot.getDate();
+        }
     }
 
     // Constructors
@@ -88,14 +91,11 @@ public class Booking {
     }
 
     public LocalDate getDate() {
-        if (slot != null && slot.getDate() != null) {
-            return slot.getDate();
-        }
-        return bookingDate;
+        return date;
     }
 
     public void setDate(LocalDate date) {
-        this.bookingDate = date;
+        this.date = date;
     }
 
     public String getTime() {
