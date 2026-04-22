@@ -32,6 +32,9 @@ public class Booking {
     @Column(name = "date", nullable = false)
     private LocalDate date;
 
+    @Column(name = "time", nullable = false)
+    private String time;
+
     @Column(name = "total_price", precision = 12, scale = 2)
     private BigDecimal totalPrice;
 
@@ -63,6 +66,9 @@ public class Booking {
         }
         if (date == null && slot != null) {
             date = slot.getDate();
+        }
+        if (time == null && slot != null) {
+            time = slot.getTime();
         }
     }
 
@@ -99,7 +105,14 @@ public class Booking {
     }
 
     public String getTime() {
+        if (time != null) {
+            return time;
+        }
         return slot != null ? slot.getTime() : null;
+    }
+
+    public void setTime(String time) {
+        this.time = time;
     }
 
     public Gym getGym() {
