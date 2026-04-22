@@ -41,11 +41,27 @@ public class AuthService {
     }
 
     private Optional<User> findByIdentifier(String identifier) {
-        Optional<User> userOpt = userRepository.findByEmail(identifier);
+        if (identifier == null) {
+            return Optional.empty();
+        }
+
+        String normalizedIdentifier = identifier.trim();
+        if (normalizedIdentifier.isBlank()) {
+            return Optional.empty();
+        }
+
+        Optional<User> userOpt = userRepository.findByEmail(normalizedIdentifier);
+        if (userOpt.isEmpty()) {
+            userOpt = userRepository.findByEmailNormalized(normalizedIdentifier);
+        }
 
         if (userOpt.isEmpty()) {
-            for (String phoneCandidate : buildPhoneCandidates(identifier)) {
+            for (String phoneCandidate : buildPhoneCandidates(normalizedIdentifier)) {
                 userOpt = userRepository.findByPhone(phoneCandidate);
+                if (userOpt.isPresent()) {
+                    return userOpt;
+                }
+                userOpt = userRepository.findByPhoneTrimmed(phoneCandidate);
                 if (userOpt.isPresent()) {
                     return userOpt;
                 }
@@ -53,7 +69,10 @@ public class AuthService {
         }
 
         if (userOpt.isEmpty()) {
-            userOpt = userRepository.findByUsername(identifier);
+            userOpt = userRepository.findByUsername(normalizedIdentifier);
+            if (userOpt.isEmpty()) {
+                userOpt = userRepository.findByUsernameNormalized(normalizedIdentifier);
+            }
         }
 
         return userOpt;
