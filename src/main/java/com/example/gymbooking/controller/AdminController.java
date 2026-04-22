@@ -26,6 +26,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @RestController
 @RequestMapping({"/api/admin", "/admin"})
@@ -923,8 +925,12 @@ public class AdminController {
         }
 
         List<Notification> notifications = notificationService.getMyNotifications(admin);
+        List<Map<String, Object>> items = notifications.stream()
+                .map(this::buildAdminNotificationItem)
+                .toList();
+
         Map<String, Object> result = new HashMap<>();
-        result.put("notifications", notifications);
+        result.put("notifications", items);
         result.put("unreadCount", notificationService.getUnreadNotificationCount(admin.getId()));
         result.put("totalCount", notificationService.getTotalNotificationCount(admin.getId()));
         return ResponseEntity.ok(result);
@@ -1010,6 +1016,49 @@ public class AdminController {
         response.put("unreadCount", notifications.size());
         response.put("totalCount", notifications.size());
         return ResponseEntity.ok(response);
+    }
+
+    private Map<String, Object> buildAdminNotificationItem(Notification notification) {
+        Map<String, Object> item = new HashMap<>();
+        item.put("id", notification.getId());
+        item.put("userId", notification.getUserId());
+        item.put("title", notification.getTitle());
+        item.put("message", notification.getMessage());
+        item.put("read", notification.isRead());
+        item.put("createdAt", notification.getCreatedAt());
+        item.put("readAt", notification.getReadAt());
+        item.put("type", resolveAdminNotificationType(notification));
+        item.put("gymName", extractGymName(notification.getMessage()));
+        return item;
+    }
+
+    private String resolveAdminNotificationType(Notification notification) {
+        String title = notification.getTitle() != null ? notification.getTitle().toLowerCase() : "";
+        String message = notification.getMessage() != null ? notification.getMessage().toLowerCase() : "";
+
+        if (title.contains("захиалга") || message.contains("захиалга")) {
+            return "BOOKING";
+        }
+
+        if (title.contains("сэтгэгдэл") || message.contains("сэтгэгдэл") || message.contains("коммент")) {
+            return "COMMENT";
+        }
+
+        return "GENERAL";
+    }
+
+    private String extractGymName(String message) {
+        if (message == null || message.isBlank()) {
+            return null;
+        }
+
+        Pattern quotedGymName = Pattern.compile("\"([^\"]+)\"");
+        Matcher matcher = quotedGymName.matcher(message);
+        if (matcher.find()) {
+            return matcher.group(1);
+        }
+
+        return null;
     }
 
     private boolean isSystemAdmin(User user) {
