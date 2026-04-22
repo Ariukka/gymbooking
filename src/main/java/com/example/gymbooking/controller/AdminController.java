@@ -1040,7 +1040,12 @@ public class AdminController {
             return "BOOKING";
         }
 
-        if (title.contains("сэтгэгдэл") || message.contains("сэтгэгдэл") || message.contains("коммент")) {
+        if (title.contains("сэтгэгдэл")
+                || message.contains("сэтгэгдэл")
+                || title.contains("коммент")
+                || message.contains("коммент")
+                || title.contains("comment")
+                || message.contains("comment")) {
             return "COMMENT";
         }
 
