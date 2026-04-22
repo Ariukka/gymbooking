@@ -1,6 +1,6 @@
 -- Reset all gym admins and recreate one admin per gym.
 -- MySQL 8+
--- Default password hash here is bcrypt for: Password-Admin@123
+-- Default password hash here is bcrypt for: Admin@12
 
 START TRANSACTION;
 
@@ -29,7 +29,7 @@ INSERT INTO users (
 )
 SELECT
     CONCAT('gymadmin_', g.id) AS username,
-    '$2a$10$n3CVLxrhQGgKn0ZYZqabz.GRdICR4AN6CwKGe7RvUo6yT8n4f4NQK' AS password,
+    '$2y$10$GP3/dSZS3ZV1vdO9xD2VFedoPmV1YaQ7HydLmcULi8xic4MVvZnr2' AS password,
     CONCAT('8', LPAD(MOD(g.id, 10000000), 7, '0')) AS phone,
     CONCAT('gymadmin_', g.id, '@example.com') AS email,
     'Gym' AS first_name,

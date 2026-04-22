@@ -16,7 +16,7 @@ import java.util.Optional;
 @Component
 public class DataInitializer implements CommandLineRunner {
     private static final String SYSTEM_ADMIN_PASSWORD = "Admin@123";
-    private static final String DEFAULT_GYM_ADMIN_PASSWORD = "Password-Admin@123";
+    private static final String DEFAULT_GYM_ADMIN_PASSWORD = "Admin@12";
 
 
     @Autowired
