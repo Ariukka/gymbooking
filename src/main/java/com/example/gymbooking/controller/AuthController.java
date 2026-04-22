@@ -122,6 +122,12 @@ public class AuthController {
                                    HttpServletRequest request) {
         String identifier = payload.getOrDefault("identifier", payload.get("phone"));
         String password = payload.get("password");
+        if (identifier != null) {
+            identifier = identifier.trim();
+        }
+        if (password != null) {
+            password = password.trim();
+        }
         String clientIp = request.getRemoteAddr();
         String loginKey = (identifier != null && !identifier.isBlank()) ? identifier : clientIp;
 
@@ -160,7 +166,7 @@ public class AuthController {
 
             User user = userOpt.get();
 
-            if (!passwordEncoder.matches(password, user.getPassword())) {
+            if (!passwordsMatch(password, user.getPassword())) {
                 System.out.println("Invalid password for user: " + identifier);
                 recordFailedLogin(loginKey, identifier, clientIp, "wrong password");
                 Map<String, Object> response = new HashMap<>();
@@ -228,6 +234,22 @@ public class AuthController {
         return (identifier == null || identifier.isBlank()) ? "unknown" : identifier;
     }
 
+    private boolean passwordsMatch(String rawPassword, String storedPassword) {
+        if (rawPassword == null || storedPassword == null || storedPassword.isBlank()) {
+            return false;
+        }
+
+        if (isBcryptHash(storedPassword)) {
+            return passwordEncoder.matches(rawPassword, storedPassword);
+        }
+
+        return rawPassword.equals(storedPassword);
+    }
+
+    private boolean isBcryptHash(String value) {
+        return value != null && value.matches("^\\$2[aby]\\$\\d{2}\\$.{53}$");
+    }
+
     // ==================== REGISTER (DIRECT - NO OTP) ====================
     @PostMapping("/register")
     public ResponseEntity<?> register(@RequestBody Map<String, String> request) {
@@ -236,6 +258,13 @@ public class AuthController {
         String phone = request.get("phone");
         String email = request.get("email");
         String password = request.get("password");
+
+        if (phone != null) {
+            phone = phone.trim();
+        }
+        if (email != null) {
+            email = email.trim();
+        }
 
         System.out.println("=== REGISTER (DIRECT) ===");
         System.out.println("Phone: " + phone);

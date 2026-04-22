@@ -17,8 +17,17 @@ public interface UserRepository extends JpaRepository<User, Long> {
     // Find by phone
     Optional<User> findByPhone(String phone);
 
+    @Query("SELECT u FROM User u WHERE TRIM(u.phone) = :phone")
+    Optional<User> findByPhoneTrimmed(@Param("phone") String phone);
+
     // Find by username (if you have username field)
     Optional<User> findByUsername(String username);
+
+    @Query("SELECT u FROM User u WHERE LOWER(TRIM(u.email)) = LOWER(:email)")
+    Optional<User> findByEmailNormalized(@Param("email") String email);
+
+    @Query("SELECT u FROM User u WHERE LOWER(TRIM(u.username)) = LOWER(:username)")
+    Optional<User> findByUsernameNormalized(@Param("username") String username);
 
     // Check existence
     boolean existsByEmail(String email);
