@@ -407,6 +407,15 @@ public class BookingController {
         return ResponseEntity.ok(bookingRepository.findByUser_IdOrderByCreatedAtDesc(currentUser.getId()));
     }
 
+    @GetMapping("/gym/{gymId}")
+    public ResponseEntity<?> getBookingsByGym(@PathVariable Long gymId) {
+        Gym gym = gymRepository.findById(gymId).orElse(null);
+        if (gym == null) {
+            return ResponseEntity.notFound().build();
+        }
+        return ResponseEntity.ok(bookingRepository.findByGym(gym));
+    }
+
     @GetMapping("/{date}")
     public ResponseEntity<?> getBookingsByDate(@PathVariable LocalDate date) {
         return ResponseEntity.ok(bookingRepository.findBySlot_Date(date));
