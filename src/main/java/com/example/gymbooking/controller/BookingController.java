@@ -34,6 +34,7 @@ import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 @RestController
@@ -264,11 +265,18 @@ public class BookingController {
                 }
 
                 boolean alreadyBookedByUser = bookingRepository.existsByUser_IdAndSlot_IdAndStatusIn(
-                        currentUser.getId(), slot.getId(), List.of("PENDING", "CONFIRMED"));
+                        currentUser.getId(), slot.getId(), List.of("PENDING", "CONFIRMED", "PENDING_PAYMENT"));
                 if (alreadyBookedByUser) {
                     return ResponseEntity.badRequest().body(Map.of(
                             "error", "Duplicate booking",
                             "message", "Time slot " + timeSlot.trim() + ": Ta ene tsagiin slotiig omno n zahiulsan baina."
+                    ));
+                }
+
+                if (hasTimeConflict(currentUser.getId(), slot)) {
+                    return ResponseEntity.badRequest().body(Map.of(
+                            "error", "Time conflict",
+                            "message", "Time slot " + timeSlot.trim() + ": Ene tsagiin dawhtssan zahialga baina."
                     ));
                 }
 
@@ -338,11 +346,18 @@ public class BookingController {
         }
 
         boolean alreadyBookedByUser = bookingRepository.existsByUser_IdAndSlot_IdAndStatusIn(
-                currentUser.getId(), slot.getId(), List.of("PENDING", "CONFIRMED"));
+                currentUser.getId(), slot.getId(), List.of("PENDING", "CONFIRMED", "PENDING_PAYMENT"));
         if (alreadyBookedByUser) {
             return ResponseEntity.badRequest().body(Map.of(
                     "error", "Duplicate booking",
                     "message", "Ta ene tsagiin slotiig omno n zahiulsan baina."
+            ));
+        }
+
+        if (hasTimeConflict(currentUser.getId(), slot)) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "error", "Time conflict",
+                    "message", "Ene tsag deer tanii oor zahialga baina."
             ));
         }
 
@@ -788,4 +803,64 @@ private Slot resolveSlot(CreateBookingRequest request) {
             return null;
         }
     }
+
+    private boolean hasTimeConflict(Long userId, Slot requestedSlot) {
+        if (userId == null || requestedSlot == null || requestedSlot.getDate() == null) {
+            return false;
+        }
+
+        TimeInterval requestedInterval = toTimeInterval(requestedSlot.getTime());
+        return bookingRepository.findByUser_IdOrderByCreatedAtDesc(userId).stream()
+                .filter(existing -> existing.getSlot() != null && Objects.equals(existing.getDate(), requestedSlot.getDate()))
+                .filter(existing -> isActiveBookingStatus(existing.getStatus()))
+                .map(existing -> toTimeInterval(existing.getSlot().getTime()))
+                .filter(Objects::nonNull)
+                .anyMatch(existingInterval -> requestedInterval != null
+                        && requestedInterval.start().isBefore(existingInterval.end())
+                        && requestedInterval.end().isAfter(existingInterval.start()));
+    }
+
+    private boolean isActiveBookingStatus(String status) {
+        if (status == null) {
+            return false;
+        }
+        return !"CANCELLED".equalsIgnoreCase(status) && !"REJECTED".equalsIgnoreCase(status);
+    }
+
+    private TimeInterval toTimeInterval(String slotTime) {
+        if (slotTime == null || slotTime.isBlank()) {
+            return null;
+        }
+
+        String normalized = normalizeTime(slotTime);
+        if ("FULL_DAY".equalsIgnoreCase(normalized)) {
+            return new TimeInterval(LocalTime.MIN, LocalTime.MAX);
+        }
+
+        if (normalized.contains("-")) {
+            String[] parts = normalized.split("-", 2);
+            LocalTime start = parseNormalizedTime(parts[0]);
+            LocalTime end = parseNormalizedTime(parts[1]);
+            if (start != null && end != null && end.isAfter(start)) {
+                return new TimeInterval(start, end);
+            }
+            return null;
+        }
+
+        LocalTime start = parseNormalizedTime(normalized);
+        if (start == null) {
+            return null;
+        }
+        return new TimeInterval(start, start.plusHours(1));
+    }
+
+    private LocalTime parseNormalizedTime(String value) {
+        try {
+            return LocalTime.parse(value, DateTimeFormatter.ofPattern("HH:mm"));
+        } catch (DateTimeParseException ignored) {
+            return null;
+        }
+    }
+
+    private record TimeInterval(LocalTime start, LocalTime end) {}
 }
