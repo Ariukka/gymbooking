@@ -7,14 +7,17 @@ import com.example.gymbooking.model.User;
 import com.example.gymbooking.repository.BookingRepository;
 import com.example.gymbooking.repository.GymRepository;
 import com.example.gymbooking.repository.SlotRepository;
+import com.example.gymbooking.repository.UserRepository;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 @RestController
 @RequestMapping({"/api/gym-admin", "/gym-admin"})
@@ -24,13 +27,19 @@ public class GymAdminController {
     private final GymRepository gymRepository;
     private final BookingRepository bookingRepository;
     private final SlotRepository slotRepository;
+    private final UserRepository userRepository;
+    private final PasswordEncoder passwordEncoder;
 
     public GymAdminController(GymRepository gymRepository,
                               BookingRepository bookingRepository,
-                              SlotRepository slotRepository) {
+                              SlotRepository slotRepository,
+                              UserRepository userRepository,
+                              PasswordEncoder passwordEncoder) {
         this.gymRepository = gymRepository;
         this.bookingRepository = bookingRepository;
         this.slotRepository = slotRepository;
+        this.userRepository = userRepository;
+        this.passwordEncoder = passwordEncoder;
     }
 
     // Helper method to get gym by admin
@@ -64,6 +73,76 @@ public class GymAdminController {
         if (updatedGym.getPhone() != null) gym.setPhone(updatedGym.getPhone());
 
         return ResponseEntity.ok(gymRepository.save(gym));
+    }
+
+    @PutMapping("/my-account")
+    public ResponseEntity<?> updateMyAccount(@AuthenticationPrincipal User admin,
+                                             @RequestBody Map<String, String> payload) {
+        if (admin == null) {
+            return ResponseEntity.status(401).body(Map.of("error", "Unauthorized"));
+        }
+
+        String newPhone = payload.get("phone");
+        String currentPassword = payload.get("currentPassword");
+        String newPassword = payload.get("newPassword");
+
+        if ((newPhone == null || newPhone.isBlank()) && (newPassword == null || newPassword.isBlank())) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Phone эсвэл шинэ нууц үг оруулна уу"));
+        }
+
+        if (newPhone != null) {
+            newPhone = newPhone.trim();
+            Optional<User> phoneOwner = userRepository.findByPhone(newPhone);
+            if (phoneOwner.isPresent() && !phoneOwner.get().getId().equals(admin.getId())) {
+                return ResponseEntity.status(409).body(Map.of("error", "Энэ утасны дугаар бүртгэлтэй байна"));
+            }
+
+            admin.setPhone(newPhone);
+            admin.setUsername(newPhone);
+        }
+
+        if (newPassword != null && !newPassword.isBlank()) {
+            if (currentPassword == null || currentPassword.isBlank()) {
+                return ResponseEntity.badRequest().body(Map.of("error", "Одоогийн нууц үгээ оруулна уу"));
+            }
+
+            if (!passwordsMatch(currentPassword.trim(), admin.getPassword())) {
+                return ResponseEntity.status(401).body(Map.of("error", "Одоогийн нууц үг буруу байна"));
+            }
+
+            admin.setPassword(passwordEncoder.encode(newPassword.trim()));
+        }
+
+        User savedAdmin = userRepository.save(admin);
+
+        return ResponseEntity.ok(Map.of(
+                "success", true,
+                "message", "Мэдээлэл амжилттай шинэчлэгдлээ",
+                "user", Map.of(
+                        "id", savedAdmin.getId(),
+                        "phone", savedAdmin.getPhone(),
+                        "email", savedAdmin.getEmail(),
+                        "firstName", savedAdmin.getFirstName(),
+                        "lastName", savedAdmin.getLastName(),
+                        "role", savedAdmin.getRole()
+                )
+        ));
+    }
+
+    private boolean passwordsMatch(String rawPassword, String storedPassword) {
+        if (rawPassword == null || storedPassword == null || storedPassword.isBlank()) {
+            return false;
+        }
+
+        if (isBcryptHash(storedPassword)) {
+            return passwordEncoder.matches(rawPassword, storedPassword);
+        }
+
+        return rawPassword.equals(storedPassword);
+    }
+
+    private boolean isBcryptHash(String value) {
+        return value != null && value.matches("^\\$2[aby]\\$\\d{2}\\$.{53}$");
     }
 
     // ================== BOOKINGS ==================
