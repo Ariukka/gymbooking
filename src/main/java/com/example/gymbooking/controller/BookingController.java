@@ -80,6 +80,8 @@ public class BookingController {
     @GetMapping("/stream")
     public SseEmitter streamBookingUpdates(@RequestParam Long gymId) {
         SseEmitter emitter = new SseEmitter(60_000L); // 60 seconds timeout
+        emitter.onTimeout(emitter::complete);
+        emitter.onError(ex -> emitter.complete());
         try {
             // Send initial data
             emitter.send(SseEmitter.event()
@@ -89,10 +91,10 @@ public class BookingController {
                             "bookedHoursByDate", getBookedHoursByDate(gymId),
                             "timestamp", LocalDateTime.now().toString()
                     )));
-            
+
             // Don't complete immediately - keep connection alive for real-time updates
             // The emitter will be completed when the client disconnects or timeout occurs
-            
+
         } catch (Exception ex) {
             emitter.completeWithError(ex);
         }
