@@ -15,6 +15,9 @@ import java.util.Optional;
 
 @Component
 public class DataInitializer implements CommandLineRunner {
+    private static final String SYSTEM_ADMIN_PASSWORD = "Admin@123";
+    private static final String DEFAULT_GYM_ADMIN_PASSWORD = "Password-Admin@123";
+
 
     @Autowired
     private UserRepository userRepository;
@@ -38,7 +41,7 @@ public class DataInitializer implements CommandLineRunner {
             systemAdmin.setLastName("");
             systemAdmin.setPhone("94671508");
             systemAdmin.setEmail("aaariuka02@gmail.com");
-            systemAdmin.setPassword(passwordEncoder.encode("Admin@123"));
+            systemAdmin.setPassword(passwordEncoder.encode(SYSTEM_ADMIN_PASSWORD));
             systemAdmin.setRole("ADMIN");
             systemAdmin.setUsername("94671508");
             systemAdmin.setVerified(true);
@@ -49,7 +52,7 @@ public class DataInitializer implements CommandLineRunner {
             System.out.println("Name: Ariunbold");
             System.out.println("Phone: 94671508");
             System.out.println("Email: aaariuka02@gmail.com");
-            System.out.println("Password: Admin@123");
+            System.out.println("Password: " + SYSTEM_ADMIN_PASSWORD);
             System.out.println("Role: ADMIN");
             System.out.println("============================");
         } else {
@@ -65,6 +68,7 @@ public class DataInitializer implements CommandLineRunner {
 
         // ODGOI GYMS-D ADMIN NEMEH
         createAdminsForExistingGyms();
+        syncDefaultPasswordsForGeneratedGymAdmins();
     }
 
     @Transactional
@@ -141,7 +145,7 @@ public class DataInitializer implements CommandLineRunner {
             gymAdmin.setLastName("");
             gymAdmin.setPhone(adminPhone);
             gymAdmin.setEmail(adminEmail);
-            gymAdmin.setPassword(passwordEncoder.encode("GymAdmin@123"));
+            gymAdmin.setPassword(passwordEncoder.encode(DEFAULT_GYM_ADMIN_PASSWORD));
             gymAdmin.setRole("GYM_ADMIN");
             gymAdmin.setUsername(adminPhone);
             gymAdmin.setVerified(true);
@@ -152,7 +156,7 @@ public class DataInitializer implements CommandLineRunner {
             System.out.println("Name: " + adminName);
             System.out.println("Phone: " + adminPhone);
             System.out.println("Email: " + adminEmail);
-            System.out.println("Password: GymAdmin@123");
+            System.out.println("Password: " + DEFAULT_GYM_ADMIN_PASSWORD);
             System.out.println("Role: GYM_ADMIN");
             System.out.println("========================");
         } else {
@@ -200,7 +204,7 @@ public class DataInitializer implements CommandLineRunner {
                 gymAdmin.setLastName("");
                 gymAdmin.setPhone("9" + String.format("%07d", gym.getId())); // 9 + gym_id
                 gymAdmin.setEmail("admin" + gym.getId() + "@gym.com");
-                gymAdmin.setPassword(passwordEncoder.encode("GymAdmin@123"));
+                gymAdmin.setPassword(passwordEncoder.encode(DEFAULT_GYM_ADMIN_PASSWORD));
                 gymAdmin.setRole("GYM_ADMIN");
                 gymAdmin.setUsername("admin" + gym.getId());
                 gymAdmin.setVerified(true);
@@ -217,10 +221,32 @@ public class DataInitializer implements CommandLineRunner {
                 System.out.println("Admin: " + gymAdmin.getFirstName());
                 System.out.println("Phone: " + gymAdmin.getPhone());
                 System.out.println("Email: " + gymAdmin.getEmail());
-                System.out.println("Password: GymAdmin@123");
+                System.out.println("Password: " + DEFAULT_GYM_ADMIN_PASSWORD);
                 System.out.println("========================");
             } else {
                 System.out.println("Gym already has admin: " + gym.getName());
+            }
+        }
+    }
+
+    @Transactional
+    private void syncDefaultPasswordsForGeneratedGymAdmins() {
+        List<User> gymAdmins = userRepository.findByRole("GYM_ADMIN");
+
+        for (User gymAdmin : gymAdmins) {
+            String username = gymAdmin.getUsername() != null ? gymAdmin.getUsername() : "";
+            String email = gymAdmin.getEmail() != null ? gymAdmin.getEmail() : "";
+            boolean generatedAdmin =
+                    username.matches("^admin\\d+$") || email.matches("^admin\\d+@gym\\.com$");
+
+            if (!generatedAdmin) {
+                continue;
+            }
+
+            if (!passwordEncoder.matches(DEFAULT_GYM_ADMIN_PASSWORD, gymAdmin.getPassword())) {
+                gymAdmin.setPassword(passwordEncoder.encode(DEFAULT_GYM_ADMIN_PASSWORD));
+                userRepository.save(gymAdmin);
+                System.out.println("Reset default password for gym admin: " + gymAdmin.getEmail());
             }
         }
     }
