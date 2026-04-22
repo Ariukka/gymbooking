@@ -14,6 +14,7 @@ import java.util.List;
 
 @Component
 public class GymAdminSeeder implements CommandLineRunner {
+    private static final String DEFAULT_GYM_ADMIN_PASSWORD = "Admin@12";
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
@@ -57,7 +58,7 @@ public class GymAdminSeeder implements CommandLineRunner {
 
                 User admin = new User();
                 admin.setUsername(username);
-                admin.setPassword(passwordEncoder.encode("admin1234"));
+                admin.setPassword(passwordEncoder.encode(DEFAULT_GYM_ADMIN_PASSWORD));
                 admin.setRole("GYM_ADMIN");
                 admin.setVerified(true);
                 admin.setGym(entityManager.getReference(Gym.class, gymId));
