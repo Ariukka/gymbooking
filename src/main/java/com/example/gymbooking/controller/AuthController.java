@@ -3,9 +3,11 @@ package com.example.gymbooking.controller;
 
 import com.example.gymbooking.config.JwtUtil;
 import com.example.gymbooking.model.Booking;
+import com.example.gymbooking.model.OtpCode;
 import com.example.gymbooking.model.User;
 import com.example.gymbooking.repository.BookingRepository;
 import com.example.gymbooking.repository.NotificationRepository;
+import com.example.gymbooking.repository.OtpRepository;
 import com.example.gymbooking.repository.UserRepository;
 import com.example.gymbooking.security.LoginAttemptService;
 import com.example.gymbooking.service.AuthService;
@@ -28,6 +30,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Random;
+import java.time.LocalDateTime;
 
 @RestController
 @RequestMapping({"/api/auth", "/auth"})
@@ -43,6 +46,7 @@ public class AuthController {
     private final NotificationRepository notificationRepository;
     private final JwtUtil jwtUtil;
     private final LoginAttemptService loginAttemptService;
+    private final OtpRepository otpRepository;
 
     @Autowired
     private JavaMailSender mailSender;
@@ -60,7 +64,8 @@ public class AuthController {
                           BookingRepository bookingRepository,
                           NotificationRepository notificationRepository,
                           JwtUtil jwtUtil,
-                          LoginAttemptService loginAttemptService) {
+                          LoginAttemptService loginAttemptService,
+                          OtpRepository otpRepository) {
         this.otpService = otpService;
         this.authService = authService;
         this.auditLogService = auditLogService;
@@ -70,6 +75,7 @@ public class AuthController {
         this.notificationRepository = notificationRepository;
         this.jwtUtil = jwtUtil;
         this.loginAttemptService = loginAttemptService;
+        this.otpRepository = otpRepository;
     }
 
     @GetMapping("/me")
@@ -404,6 +410,14 @@ return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         // Store by email
         registerOtpStore.put(email, otp);
         tempUserStore.put(email, tempUser);
+        otpRepository.deleteByEmailAndType(email, "REGISTRATION");
+        OtpCode registrationOtp = new OtpCode();
+        registrationOtp.setEmail(email);
+        registrationOtp.setPhone(phone);
+        registrationOtp.setCode(otp);
+        registrationOtp.setType("REGISTRATION");
+        registrationOtp.setExpiresAt(LocalDateTime.now().plusMinutes(10));
+        otpRepository.save(registrationOtp);
 
         System.out.println("[REGISTER OTP] Email: " + email + " - OTP: " + otp);
         System.out.println("[REGISTER OTP] Phone: " + phone);
@@ -683,6 +697,13 @@ return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         Random random = new Random();
         String otp = String.format("%06d", random.nextInt(1000000));
         emailOtpStore.put(email, otp);
+        otpRepository.deleteByEmailAndType(email, "PASSWORD_RESET");
+        OtpCode resetOtp = new OtpCode();
+        resetOtp.setEmail(email);
+        resetOtp.setCode(otp);
+        resetOtp.setType("PASSWORD_RESET");
+        resetOtp.setExpiresAt(LocalDateTime.now().plusMinutes(10));
+        otpRepository.save(resetOtp);
 
         System.out.println("[EMAIL OTP] Sent to: " + email + " - OTP: " + otp);
 
