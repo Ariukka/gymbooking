@@ -19,9 +19,12 @@ import java.time.Duration;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
+import java.util.regex.Pattern;
 
 @Component
 public class OAuth2AuthenticationSuccessHandler implements AuthenticationSuccessHandler {
+
+    private static final Pattern NAME_PATTERN = Pattern.compile("^[A-Za-z\\u0400-\\u04FF\\s\\-]+$");
 
     private final UserRepository userRepository;
     private final JwtUtil jwtUtil;
@@ -98,12 +101,29 @@ public class OAuth2AuthenticationSuccessHandler implements AuthenticationSuccess
                     User user = new User();
                     user.setEmail(email);
                     user.setUsername(email);
-                    user.setFirstName(oauthUser.getAttribute("given_name"));
-                    user.setLastName(oauthUser.getAttribute("family_name"));
+                    user.setFirstName(sanitizeName(oauthUser.getAttribute("given_name")));
+                    user.setLastName(sanitizeName(oauthUser.getAttribute("family_name")));
                     user.setVerified(true);
                     user.setRole("USER");
                     return userRepository.save(user);
                 });
+    }
+
+    private String sanitizeName(String name) {
+        if (name == null) {
+            return null;
+        }
+
+        String normalized = name.trim();
+        if (normalized.isBlank()) {
+            return null;
+        }
+
+        if (!NAME_PATTERN.matcher(normalized).matches()) {
+            return null;
+        }
+
+        return normalized;
     }
 
     private boolean isAllowedRedirect(String redirectUrl) {
