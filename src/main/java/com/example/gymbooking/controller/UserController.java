@@ -6,9 +6,11 @@ import com.example.gymbooking.model.User;
 import com.example.gymbooking.repository.BookingRepository;
 import com.example.gymbooking.repository.NotificationRepository;
 import com.example.gymbooking.repository.UserRepository;
+import com.example.gymbooking.repository.GymRepository;
 import com.example.gymbooking.service.NotificationService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -23,15 +25,18 @@ public class UserController {
     private final BookingRepository bookingRepository;
     private final NotificationRepository notificationRepository;
     private final NotificationService notificationService;
+    private final GymRepository gymRepository;
 
     public UserController(UserRepository userRepository,
                           BookingRepository bookingRepository,
                           NotificationRepository notificationRepository,
-                          NotificationService notificationService) {
+                          NotificationService notificationService,
+                          GymRepository gymRepository) {
         this.userRepository = userRepository;
         this.bookingRepository = bookingRepository;
         this.notificationRepository = notificationRepository;
         this.notificationService = notificationService;
+        this.gymRepository = gymRepository;
     }
 
     // Get current user profile
@@ -150,19 +155,22 @@ public class UserController {
 
     // Delete user account
     @DeleteMapping("/me")
+    @Transactional
     public ResponseEntity<?> deleteAccount(@AuthenticationPrincipal User user) {
-        // Delete user's notifications
-        notificationRepository.deleteByUser_Id(user.getId());
+        Long userId = user.getId();
 
-        // Delete user's bookings (or set to cancelled)
-        List<Booking> userBookings = bookingRepository.findByUser_Id(user.getId());
+        notificationRepository.deleteByUser_Id(userId);
+
+        List<Booking> userBookings = bookingRepository.findByUser_Id(userId);
         for (Booking booking : userBookings) {
             booking.setStatus("CANCELLED");
-            bookingRepository.save(booking);
+            booking.setUser(null);
         }
+        bookingRepository.saveAll(userBookings);
 
-        // Delete user
-        userRepository.delete(user);
+        gymRepository.findByOwnerUser(user).forEach(gym -> gym.setOwnerUser(null));
+
+        userRepository.deleteById(userId);
 
         return ResponseEntity.ok(Map.of(
                 "success", true,
