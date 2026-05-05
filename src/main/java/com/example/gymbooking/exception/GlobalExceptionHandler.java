@@ -53,6 +53,12 @@ public class GlobalExceptionHandler {
     }
 
 
+    @ExceptionHandler(NullPointerException.class)
+    public ResponseEntity<ErrorResponseDto> handleNullPointer(NullPointerException ex) {
+        log.error("Null pointer detected", ex);
+        return buildError(HttpStatus.BAD_REQUEST, "Required data is missing or invalid.");
+    }
+
     @ExceptionHandler(AsyncRequestTimeoutException.class)
     public ResponseEntity<Void> handleAsyncTimeout(AsyncRequestTimeoutException ex) {
         log.warn("Async request timed out", ex);
@@ -62,7 +68,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponseDto> handleGeneric(Exception ex) {
         log.error("Unhandled exception", ex);
-        return buildError(HttpStatus.INTERNAL_SERVER_ERROR, ex.getMessage());
+        return buildError(HttpStatus.INTERNAL_SERVER_ERROR, "An unexpected server error occurred.");
     }
 
     private ResponseEntity<ErrorResponseDto> buildError(HttpStatus status, String message) {
