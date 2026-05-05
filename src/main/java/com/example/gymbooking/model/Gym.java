@@ -7,6 +7,8 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 
+import static com.example.gymbooking.model.GymStatus.PENDING;
+
 @Entity
 @Table(name = "gyms")
 public class Gym {
@@ -51,6 +53,10 @@ public class Gym {
     @Column(name = "is_active")
     private Boolean active = true;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "status", nullable = false)
+    private GymStatus status = PENDING;
+
     @Column(name = "requested_at")  // Add this field
     private LocalDateTime requestedAt;
 
@@ -82,6 +88,9 @@ public class Gym {
         }
         if (legacyApproved == null) {
             legacyApproved = approved;
+        }
+        if (status == null) {
+            status = Boolean.TRUE.equals(approved) ? GymStatus.APPROVED : GymStatus.PENDING;
         }
     }
 
@@ -175,6 +184,24 @@ public class Gym {
     public void setApproved(boolean approved) {
         this.approved = approved;
         this.legacyApproved = approved;
+        this.status = approved ? GymStatus.APPROVED : GymStatus.PENDING;
+    }
+
+
+    public GymStatus getStatus() {
+        return status;
+    }
+
+    public void setStatus(GymStatus status) {
+        this.status = status;
+        if (status == GymStatus.APPROVED) {
+            this.approved = true;
+            this.legacyApproved = true;
+        } else if (status == GymStatus.REJECTED) {
+            this.approved = false;
+            this.legacyApproved = false;
+            this.active = false;
+        }
     }
 
     public boolean isActive() {
