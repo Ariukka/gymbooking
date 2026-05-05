@@ -1,5 +1,6 @@
 package com.example.gymbooking.service;
 
+import com.example.gymbooking.exception.ResourceNotFoundException;
 import com.example.gymbooking.model.Booking;
 import com.example.gymbooking.model.Gym;
 import com.example.gymbooking.model.GymComment;
@@ -9,6 +10,8 @@ import com.example.gymbooking.model.User;
 import com.example.gymbooking.repository.NotificationRepository;
 import com.example.gymbooking.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -20,6 +23,8 @@ import java.util.Set;
 
 @Service
 public class NotificationService {
+
+    private static final Logger log = LoggerFactory.getLogger(NotificationService.class);
 
     @Autowired
     private NotificationRepository notificationRepository;
@@ -40,6 +45,9 @@ public class NotificationService {
     public List<Notification> getMyNotifications(User user) {
         if (user == null) {
             throw new IllegalArgumentException("Хэрэглэгч хоосон байж болохгүй");
+        }
+        if (user.getId() == null) {
+            throw new IllegalArgumentException("Хэрэглэгчийн ID хоосон байж болохгүй");
         }
         return notificationRepository.findByUserIdOrderByCreatedAtDesc(user.getId());
     }
@@ -108,27 +116,42 @@ public class NotificationService {
                 requester.getUsername(), gym.getName()));
         notification.setRead(false);
 
-        return notificationRepository.save(notification);
+        Notification savedNotification = notificationRepository.save(notification);
+        log.info("Gym request notification created. notificationId={}, adminUserId={}", savedNotification.getId(), admin.getId());
+        return savedNotification;
     }
     /**
      * Шинэ мэдэгдэл үүсгэх
      */
     @Transactional
     public Notification createNotification(Long userId, String title, String message) {
-        Optional<User> userOptional = userRepository.findById(userId);
-
-        if (userOptional.isEmpty()) {
-            throw new RuntimeException("Хэрэглэгч олдсонгүй. ID: " + userId);
+        if (userId == null) {
+            throw new IllegalArgumentException("userId хоосон байж болохгүй");
         }
+
+        String normalizedTitle = title == null ? null : title.trim();
+        String normalizedMessage = message == null ? null : message.trim();
+
+        if (normalizedTitle == null || normalizedTitle.isEmpty()) {
+            throw new IllegalArgumentException("title хоосон байж болохгүй");
+        }
+        if (normalizedMessage == null || normalizedMessage.isEmpty()) {
+            throw new IllegalArgumentException("message хоосон байж болохгүй");
+        }
+
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Хэрэглэгч олдсонгүй. ID: " + userId));
 
         Notification notification = new Notification();
         notification.setUserId(userId);
-        notification.setUser(userOptional.get());
-        notification.setTitle(title);
-        notification.setMessage(message);
+        notification.setUser(user);
+        notification.setTitle(normalizedTitle);
+        notification.setMessage(normalizedMessage);
         notification.setRead(false);
 
-        return notificationRepository.save(notification);
+        Notification savedNotification = notificationRepository.save(notification);
+        log.info("Notification created successfully. notificationId={}, userId={}", savedNotification.getId(), userId);
+        return savedNotification;
     }
 
     /**
@@ -219,7 +242,7 @@ public class NotificationService {
     @Transactional
     public Notification markAsRead(Long notificationId) {
         Notification notification = notificationRepository.findById(notificationId)
-                .orElseThrow(() -> new RuntimeException("Мэдэгдэл олдсонгүй. ID: " + notificationId));
+                .orElseThrow(() -> new ResourceNotFoundException("Мэдэгдэл олдсонгүй. ID: " + notificationId));
 
         notification.setRead(true);
         return notificationRepository.save(notification);
