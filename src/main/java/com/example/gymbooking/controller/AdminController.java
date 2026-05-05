@@ -1,6 +1,7 @@
 package com.example.gymbooking.controller;
 
 import com.example.gymbooking.model.Gym;
+import com.example.gymbooking.model.GymStatus;
 import com.example.gymbooking.model.Notification;
 import com.example.gymbooking.model.Payment;
 import com.example.gymbooking.model.User;
@@ -197,6 +198,7 @@ public class AdminController {
                     .body(Map.of("success", false, "message", "Gym аль хэдийн батлагдсан"));
         }
 
+        gym.setStatus(GymStatus.APPROVED);
         gym.setApproved(true);
         gym.setActive(true);
         gym.setApprovedAt(LocalDateTime.now());
@@ -244,6 +246,7 @@ public class AdminController {
 
         String reason = request != null ? request.get("reason") : null;
 
+        gym.setStatus(GymStatus.REJECTED);
         gym.setApproved(false);
         gym.setActive(false);
         Gym savedGym = gymRepository.save(gym);
