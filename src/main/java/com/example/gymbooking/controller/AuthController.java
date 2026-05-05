@@ -19,6 +19,7 @@ import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.transaction.annotation.Transactional;
 
 import jakarta.servlet.http.HttpServletRequest;
 
@@ -91,6 +92,7 @@ public class AuthController {
         ));
     }
 
+    @Transactional
     @DeleteMapping("/me")
     public ResponseEntity<?> deleteCurrentUser(@AuthenticationPrincipal User currentUser) {
         if (currentUser == null) {
