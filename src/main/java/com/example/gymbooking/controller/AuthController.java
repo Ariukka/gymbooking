@@ -524,6 +524,18 @@ return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
         }
 
+        if (userRepository.existsByEmail(tempUser.getEmail())
+                || userRepository.existsByPhone(tempUser.getPhone())
+                || userRepository.existsByUsername(tempUser.getUsername())) {
+            registerOtpStore.remove(email);
+            tempUserStore.remove(email);
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", "Энэ хэрэглэгч аль хэдийн бүртгэлтэй байна. Нэвтрэх хэсгийг ашиглана уу.");
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(response);
+        }
+
         try {
             tempUser.setVerified(true);
             userRepository.save(tempUser);
@@ -601,6 +613,18 @@ return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
             response.put("success", false);
             response.put("message", "Хэрэглэгчийн мэдээлэл олдсонгүй. Дахин бүртгүүлнэ үү.");
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+        }
+
+        if (userRepository.existsByEmail(tempUser.getEmail())
+                || userRepository.existsByPhone(tempUser.getPhone())
+                || userRepository.existsByUsername(tempUser.getUsername())) {
+            registerOtpStore.remove(email);
+            tempUserStore.remove(email);
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", "Энэ хэрэглэгч аль хэдийн бүртгэлтэй байна. Нэвтрэх хэсгийг ашиглана уу.");
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(response);
         }
 
         try {
