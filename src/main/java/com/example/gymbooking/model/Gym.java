@@ -2,6 +2,7 @@
 package com.example.gymbooking.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.persistence.*;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -143,6 +144,26 @@ public class Gym {
 
     public void setImg(String img) {
         this.img = img;
+    }
+
+    @JsonProperty("image")
+    public String getImage() {
+        return img;
+    }
+
+    @JsonProperty("image")
+    public void setImage(String image) {
+        this.img = image;
+    }
+
+    @JsonProperty("imageUrl")
+    public String getImageUrl() {
+        return img;
+    }
+
+    @JsonProperty("imageUrl")
+    public void setImageUrl(String imageUrl) {
+        this.img = imageUrl;
     }
 
     public BigDecimal getRating() {
