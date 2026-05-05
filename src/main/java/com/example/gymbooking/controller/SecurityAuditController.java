@@ -12,7 +12,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 @RestController
-@RequestMapping({"/api/admin/security", "/admin/security"})
+@RequestMapping({"/api/admin/security", "/admin/security", "/api/admin", "/admin"})
 @CrossOrigin(origins = "http://localhost:3000")
 public class SecurityAuditController {
 
@@ -22,7 +22,7 @@ public class SecurityAuditController {
         this.auditLogService = auditLogService;
     }
 
-    @GetMapping("/audit-logs")
+    @GetMapping({"/audit-logs", "/security/audit-logs"})
     public List<AuditLog> getAuditLogs(@RequestParam(defaultValue = "100") int limit) {
         List<AuditLog> logs = auditLogService.getAllLogs();
         if (limit <= 0) {
