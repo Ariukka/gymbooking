@@ -13,6 +13,7 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
     List<Booking> findByUser_IdOrderByCreatedAtDesc(Long userId);
     List<Booking> findByGymId(Long gymId);
     List<Booking> findByGym(Gym gym);
+    List<Booking> findByGymAndDateBetweenOrderByDateAscTimeAsc(Gym gym, LocalDate startDate, LocalDate endDate);
     List<Booking> findByGymAndStatus(Gym gym, String status);
     List<Booking> findByGymAndApprovedTrue(Gym gym);
     boolean existsBySlot_IdAndStatusIn(Long slotId, List<String> statuses);

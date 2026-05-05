@@ -9,10 +9,13 @@ import com.example.gymbooking.repository.UserRepository;
 import com.example.gymbooking.service.NotificationService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
+import jakarta.validation.Valid;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Pattern;
 
 @RestController
 @RequestMapping("/api/users")
@@ -50,12 +53,21 @@ public class UserController {
 
     // Update current user profile
     @PutMapping("/me")
-    public ResponseEntity<User> updateCurrentUser(@AuthenticationPrincipal User currentUser,
-                                                  @RequestBody User updatedUser) {
+    public ResponseEntity<?> updateCurrentUser(@AuthenticationPrincipal User currentUser,
+                                                  @Valid @RequestBody User updatedUser) {
+        // Validate Mongolian characters for name fields
         if (updatedUser.getFirstName() != null) {
+            if (!isValidMongolian(updatedUser.getFirstName())) {
+                return ResponseEntity.badRequest()
+                    .body(Map.of("error", "Нэр зөвхөн кирилл үсэг, зай, ташуу зураас агуулах ёстой"));
+            }
             currentUser.setFirstName(updatedUser.getFirstName());
         }
         if (updatedUser.getLastName() != null) {
+            if (!isValidMongolian(updatedUser.getLastName())) {
+                return ResponseEntity.badRequest()
+                    .body(Map.of("error", "Овог зөвхөн кирилл үсэг, зай, ташуу зураас агууах ёстой"));
+            }
             currentUser.setLastName(updatedUser.getLastName());
         }
         if (updatedUser.getEmail() != null) {
@@ -66,7 +78,10 @@ public class UserController {
         }
 
         User savedUser = userRepository.save(currentUser);
-        return ResponseEntity.ok(savedUser);
+        return ResponseEntity.ok(Map.of(
+            "message", "Профайл амжилттай шинэчлэгдлээ",
+            "user", savedUser
+        ));
     }
 
     // Get current user's bookings
@@ -168,5 +183,14 @@ public class UserController {
                 "success", true,
                 "message", "Account deleted successfully"
         ));
+    }
+
+    // Helper method to validate Mongolian characters
+    private boolean isValidMongolian(String text) {
+        if (text == null || text.trim().isEmpty()) {
+            return false;
+        }
+        // Allow Mongolian Cyrillic characters, spaces, and hyphens
+        return Pattern.matches("^[\\u0400-\\u04FF\\s\\-]+$", text.trim());
     }
 }

@@ -11,8 +11,12 @@ public class OtpCode {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    private String phone;
-    private String email;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id")
+    private User user; // Can be null for registration OTPs
+
+    private String phone; // For registration OTPs where user doesn't exist yet
+    private String email;  // For registration OTPs where user doesn't exist yet
     private String code;
     private String type; // "REGISTRATION" or "PASSWORD_RESET"
 
@@ -22,6 +26,9 @@ public class OtpCode {
     // ===== Getters & Setters =====
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
+
+    public User getUser() { return user; }
+    public void setUser(User user) { this.user = user; }
 
     public String getPhone() { return phone; }
     public void setPhone(String phone) { this.phone = phone; }
