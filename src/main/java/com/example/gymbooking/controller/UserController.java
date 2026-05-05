@@ -154,6 +154,7 @@ public class UserController {
     }
 
     // Delete user account
+    @Transactional
     @DeleteMapping("/me")
     public ResponseEntity<?> deleteAccount(@AuthenticationPrincipal User user) {
         // Delete user's notifications
