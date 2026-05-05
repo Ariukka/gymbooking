@@ -89,4 +89,11 @@ public class NotificationController {
         notificationService.deleteNotification(notificationId);
         return ResponseEntity.ok().build();
     }
+
+    private Long requireCurrentUserId(User currentUser) {
+        if (currentUser == null || currentUser.getId() == null) {
+            throw new ResourceNotFoundException("Authenticated user not found");
+        }
+        return currentUser.getId();
+    }
 }
