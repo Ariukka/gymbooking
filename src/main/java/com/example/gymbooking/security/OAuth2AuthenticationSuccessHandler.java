@@ -4,6 +4,7 @@ import com.example.gymbooking.config.JwtUtil;
 import com.example.gymbooking.model.User;
 import com.example.gymbooking.repository.UserRepository;
 import jakarta.servlet.ServletException;
+import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Value;
@@ -14,6 +15,9 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.util.UriComponentsBuilder;
 
 import java.io.IOException;
+import java.time.Duration;
+import java.util.Arrays;
+import java.util.List;
 import java.util.Optional;
 
 @Component
@@ -24,6 +28,15 @@ public class OAuth2AuthenticationSuccessHandler implements AuthenticationSuccess
 
     @Value("${app.frontend.oauth2-success-url:http://localhost:3000/login/callback}")
     private String frontendSuccessUrl;
+
+    @Value("${app.frontend.oauth2-success-mode:jwt}")
+    private String successMode;
+
+    @Value("${app.frontend.oauth2-redirect-whitelist:http://localhost:3000}")
+    private String redirectWhitelist;
+
+    @Value("${jwt.expiration:86400000}")
+    private long jwtExpirationMs;
 
     public OAuth2AuthenticationSuccessHandler(UserRepository userRepository, JwtUtil jwtUtil) {
         this.userRepository = userRepository;
@@ -55,6 +68,22 @@ public class OAuth2AuthenticationSuccessHandler implements AuthenticationSuccess
 
         String jwt = jwtUtil.generateToken(tokenSubject);
 
+        if (!isAllowedRedirect(frontendSuccessUrl)) {
+            response.sendError(HttpServletResponse.SC_BAD_REQUEST, "Frontend redirect URL is not in whitelist");
+            return;
+        }
+
+        if ("cookie".equalsIgnoreCase(successMode)) {
+            Cookie cookie = new Cookie("auth_token", jwt);
+            cookie.setHttpOnly(true);
+            cookie.setSecure(request.isSecure());
+            cookie.setPath("/");
+            cookie.setMaxAge((int) Duration.ofMillis(jwtExpirationMs).getSeconds());
+            response.addCookie(cookie);
+            response.sendRedirect(frontendSuccessUrl);
+            return;
+        }
+
         String redirectUrl = UriComponentsBuilder.fromUriString(frontendSuccessUrl)
                 .queryParam("token", jwt)
                 .build()
@@ -75,5 +104,18 @@ public class OAuth2AuthenticationSuccessHandler implements AuthenticationSuccess
                     user.setRole("USER");
                     return userRepository.save(user);
                 });
+    }
+
+    private boolean isAllowedRedirect(String redirectUrl) {
+        List<String> allowedOrigins = Arrays.stream(redirectWhitelist.split(","))
+                .map(String::trim)
+                .filter(value -> !value.isBlank())
+                .toList();
+
+        if (allowedOrigins.isEmpty()) {
+            return true;
+        }
+
+        return allowedOrigins.stream().anyMatch(redirectUrl::startsWith);
     }
 }
