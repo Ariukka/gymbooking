@@ -1,7 +1,9 @@
 package com.example.gymbooking.config;
 
 import com.example.gymbooking.security.JwtFilter;
+import com.example.gymbooking.security.OAuth2AuthenticationSuccessHandler;
 import com.example.gymbooking.security.SecurityResponseHeadersFilter;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -16,22 +18,27 @@ import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 
 @Configuration
 public class SecurityConfig {
 
+    @Value("${app.cors.allowed-origins:http://localhost:3000}")
+    private String allowedOrigins;
+
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http,
                                            JwtFilter jwtFilter,
-                                           SecurityResponseHeadersFilter headersFilter) throws Exception {
+                                           SecurityResponseHeadersFilter headersFilter,
+                                           OAuth2AuthenticationSuccessHandler oAuth2AuthenticationSuccessHandler) throws Exception {
         http
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .csrf(csrf -> csrf.disable())
-                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                        .requestMatchers("/api/auth/**", "/auth/**", "/api/appointments/**", "/api/gyms", "/api/users").permitAll()
+                        .requestMatchers("/api/auth/**", "/auth/**", "/oauth2/**", "/login/oauth2/**", "/api/appointments/**", "/api/gyms", "/api/users").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/bookings/stream").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/comments", "/api/comments/**", "/api/gyms/*/comments/**").permitAll()
                         .requestMatchers("/api/admin/notifications/**", "/api/notifications/admin/**")
@@ -42,6 +49,7 @@ public class SecurityConfig {
                         .requestMatchers("/error").permitAll()
                         .anyRequest().authenticated()
                 )
+                .oauth2Login(oauth2 -> oauth2.successHandler(oAuth2AuthenticationSuccessHandler))
                 .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(headersFilter, JwtFilter.class);
 
@@ -56,7 +64,11 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(List.of("http://localhost:3000"));
+        List<String> origins = Arrays.stream(allowedOrigins.split(","))
+                .map(String::trim)
+                .filter(origin -> !origin.isBlank())
+                .toList();
+        configuration.setAllowedOrigins(origins.isEmpty() ? Collections.singletonList("http://localhost:3000") : origins);
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(Arrays.asList("*"));
         configuration.setAllowCredentials(true);
