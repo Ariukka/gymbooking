@@ -1,6 +1,7 @@
 package com.example.gymbooking.controller;
 
 import com.example.gymbooking.model.Gym;
+import com.example.gymbooking.model.GymStatus;
 import com.example.gymbooking.model.User;
 import com.example.gymbooking.repository.GymRepository;
 import com.example.gymbooking.repository.UserRepository;
@@ -33,7 +34,7 @@ public class GymController {
     // Get all approved gyms
     @GetMapping
     public List<Gym> getAllGyms() {
-        return gymRepository.findByApprovedTrueAndActiveTrueOrderByIdAsc();
+        return gymRepository.findByStatusAndActiveTrueOrderByIdAsc(GymStatus.APPROVED);
     }
 
     // Get gym by ID
@@ -54,6 +55,7 @@ public class GymController {
         
         try {
             gym.setOwnerUser(user);
+            gym.setStatus(GymStatus.PENDING);
             gym.setApproved(false);
             gym.setActive(true);
             gym.setRequestedAt(LocalDateTime.now());

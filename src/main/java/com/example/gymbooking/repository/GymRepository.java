@@ -1,6 +1,7 @@
 package com.example.gymbooking.repository;
 
 import com.example.gymbooking.model.Gym;
+import com.example.gymbooking.model.GymStatus;
 import com.example.gymbooking.model.User;
 import org.springframework.data.jpa.repository.JpaRepository;
 import java.util.List;
@@ -13,6 +14,8 @@ public interface GymRepository extends JpaRepository<Gym, Long> {
     List<Gym> findByApprovedTrue();
     List<Gym> findByApprovedTrueAndActiveTrue();
     List<Gym> findByApprovedTrueAndActiveTrueOrderByIdAsc();
+    List<Gym> findByStatus(GymStatus status);
+    List<Gym> findByStatusAndActiveTrueOrderByIdAsc(GymStatus status);
     List<Gym> findByApprovedFalse();
     List<Gym> findByApproved(boolean approved);
     List<Gym> findByOwnerUserOrderByIdAsc(User ownerUser);
