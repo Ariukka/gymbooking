@@ -15,7 +15,9 @@ import com.example.gymbooking.service.GymDataService;
 import com.example.gymbooking.service.NotificationService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
@@ -624,8 +626,10 @@ public class AdminController {
      */
     @GetMapping("/system/gym-admins")
     public ResponseEntity<List<Map<String, Object>>> getSystemGymAdmins() {
-        List<Map<String, Object>> admins = userRepository.findByRole("GYM_ADMIN")
+        List<Map<String, Object>> admins = userRepository.findAll()
                 .stream()
+                .filter(user -> user.getRole() != null)
+                .filter(user -> "GYM_ADMIN".equalsIgnoreCase(user.getRole()) || "ROLE_GYM_ADMIN".equalsIgnoreCase(user.getRole()))
                 .map(user -> {
                     Map<String, Object> row = buildUserPanelRow(user);
                     if (user.getGym() != null) {
@@ -922,12 +926,13 @@ public class AdminController {
      * Admin notifications feed for dashboard panels.
      */
     @GetMapping("/notifications")
-    public ResponseEntity<Map<String, Object>> getAdminNotifications(@AuthenticationPrincipal User admin) {
-        if (admin == null) {
+    public ResponseEntity<Map<String, Object>> getAdminNotifications(Authentication authentication) {
+        User admin = resolveAuthenticatedUser(authentication);
+        if (admin == null || admin.getId() == null) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
 
-        List<Notification> notifications = notificationService.getMyNotifications(admin);
+        List<Notification> notifications = notificationService.getMyNotifications(admin.getId());
         List<Map<String, Object>> items = notifications.stream()
                 .map(this::buildAdminNotificationItem)
                 .toList();
@@ -937,6 +942,27 @@ public class AdminController {
         result.put("unreadCount", notificationService.getUnreadNotificationCount(admin.getId()));
         result.put("totalCount", notificationService.getTotalNotificationCount(admin.getId()));
         return ResponseEntity.ok(result);
+    }
+
+    private User resolveAuthenticatedUser(Authentication authentication) {
+        if (authentication == null || !authentication.isAuthenticated()) {
+            return null;
+        }
+
+        Object principal = authentication.getPrincipal();
+        if (principal instanceof User userPrincipal) {
+            return userPrincipal;
+        }
+
+        if (principal instanceof UserDetails userDetails) {
+            return userRepository.findByUsernameNormalized(userDetails.getUsername()).orElse(null);
+        }
+
+        if (principal instanceof String username && !"anonymousUser".equalsIgnoreCase(username)) {
+            return userRepository.findByUsernameNormalized(username).orElse(null);
+        }
+
+        return null;
     }
 
     /**
