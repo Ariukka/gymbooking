@@ -35,12 +35,12 @@ public class User implements UserDetails {
     private String email;
 
     @Size(max = 50, message = "Нэр хэт урт байж болохгүй")
-    @Pattern(regexp = "^[\\u0400-\\u04FF\\s\\-]+$", message = "Нэр зөвхөн кирилл үсэг, зай, ташуу зураас агуулах ёстой")
+    @Pattern(regexp = "^[\\u0400-\\u04FF\\s\\-]*$", message = "Нэр зөвхөн кирилл үсэг, зай, ташуу зураас агуулах ёстой")
     @Column(columnDefinition = "VARCHAR(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci")
     private String firstName;
 
     @Size(max = 50, message = "Овог хэт урт байж болохгүй")
-    @Pattern(regexp = "^[\\u0400-\\u04FF\\s\\-]+$", message = "Овог зөвхөн кирилл үсэг, зай, ташуу зураас агуулах ёстой")
+    @Pattern(regexp = "^[\\u0400-\\u04FF\\s\\-]*$", message = "Овог зөвхөн кирилл үсэг, зай, ташуу зураас агуулах ёстой")
     @Column(columnDefinition = "VARCHAR(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci")
     private String lastName;
 
