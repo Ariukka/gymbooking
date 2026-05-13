@@ -92,8 +92,8 @@ public class BookingController {
     }
 
     @GetMapping("/stream")
-    public SseEmitter streamBookingUpdates(@RequestParam Long gymId) {
-        SseEmitter emitter = new SseEmitter(60_000L); // 60 seconds timeout
+    public SseEmitter streamBookingUpdates(@RequestParam(required = false) Long gymId) {
+        SseEmitter emitter = new SseEmitter(0L); // no timeout to avoid periodic client-side error/reconnect loops
         emitter.onTimeout(emitter::complete);
         emitter.onError(ex -> emitter.complete());
         try {
@@ -102,7 +102,7 @@ public class BookingController {
                     .name("booking-update")
                     .data(Map.of(
                             "gymId", gymId,
-                            "bookedHoursByDate", getBookedHoursByDate(gymId),
+                            "bookedHoursByDate", gymId != null ? getBookedHoursByDate(gymId) : Map.of(),
                             "timestamp", LocalDateTime.now().toString()
                     )));
 
