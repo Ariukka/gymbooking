@@ -122,6 +122,22 @@ public class QPayService {
         return response;
     }
 
+
+    public Map<String, Object> buildQrPaymentPayload(Payment payment, Map<String, Object> invoice) {
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("invoice_id", firstNonBlank(invoice.get("invoice_id"), invoice.get("invoiceId")));
+        payload.put("sender_invoice_no", firstNonBlank(invoice.get("sender_invoice_no"), invoice.get("senderInvoiceNo")));
+        payload.put("amount", payment.getAmount());
+        payload.put("gym_name", payment.getBooking() != null && payment.getBooking().getGym() != null
+                ? payment.getBooking().getGym().getName()
+                : null);
+        payload.put("qr_text", firstNonBlank(invoice.get("qr_text"), invoice.get("qrText"), invoice.get("qPay_QRcode")));
+        payload.put("qr_image", firstNonBlank(invoice.get("qr_image"), invoice.get("qrImage"), invoice.get("qr_image_url"), invoice.get("qrImageUrl")));
+        payload.put("urls", invoice.getOrDefault("urls", List.of()));
+        payload.put("raw", invoice);
+        return payload;
+    }
+
     private String buildDescription(Payment payment) {
         Booking booking = payment.getBooking();
         if (booking == null) {
@@ -213,6 +229,17 @@ public class QPayService {
         if (isBlank(username) || isBlank(password) || isBlank(invoiceCode) || isBlank(callbackUrl)) {
             throw new IllegalStateException("QPay configuration is incomplete. Please set qpay.username, qpay.password, qpay.invoice-code and qpay.callback-url.");
         }
+    }
+
+
+    private String firstNonBlank(Object... values) {
+        for (Object value : values) {
+            String text = Objects.toString(value, null);
+            if (text != null && !text.isBlank()) {
+                return text;
+            }
+        }
+        return null;
     }
 
     private boolean isBlank(String value) {
