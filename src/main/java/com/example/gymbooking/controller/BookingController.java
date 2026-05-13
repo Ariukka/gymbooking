@@ -23,6 +23,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -38,8 +40,10 @@ import java.util.Objects;
 import java.util.stream.Collectors;
 
 @RestController
-@RequestMapping("/api/bookings")
+@RequestMapping({"/api/bookings", "/bookings"})
 public class BookingController {
+
+    private static final Logger log = LoggerFactory.getLogger(BookingController.class);
 
     private final BookingRepository bookingRepository;
     private final EmailService emailService;
@@ -214,7 +218,15 @@ public class BookingController {
     @Transactional
     public ResponseEntity<?> createBooking(@AuthenticationPrincipal User currentUser,
                                            @RequestBody CreateBookingRequest request) {
+        log.info("=== BOOKING DEBUG START ===");
+        log.info("CURRENT USER: {}", currentUser);
+        log.info("CURRENT USER ID: {}", currentUser != null ? currentUser.getId() : "null");
+        log.info("CURRENT USER USERNAME: {}", currentUser != null ? currentUser.getUsername() : "null");
+        log.info("REQUEST: {}", request);
+        log.info("=== BOOKING DEBUG END ===");
+        
         if (currentUser == null) {
+            log.error("USER IS NULL - UNAUTHORIZED");
             return ResponseEntity.status(401).body(Map.of("error", "Unauthorized"));
         }
 

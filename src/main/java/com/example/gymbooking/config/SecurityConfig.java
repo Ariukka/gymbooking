@@ -1,7 +1,6 @@
 package com.example.gymbooking.config;
 
 import com.example.gymbooking.security.JwtFilter;
-import com.example.gymbooking.security.OAuth2AuthenticationSuccessHandler;
 import com.example.gymbooking.security.SecurityResponseHeadersFilter;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -30,15 +29,15 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http,
                                            JwtFilter jwtFilter,
-                                           SecurityResponseHeadersFilter headersFilter,
-                                           OAuth2AuthenticationSuccessHandler oAuth2AuthenticationSuccessHandler) throws Exception {
+                                           SecurityResponseHeadersFilter headersFilter) throws Exception {
         http
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .csrf(csrf -> csrf.disable())
-                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
+                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                        .requestMatchers("/api/auth/**", "/auth/**", "/oauth2/**", "/login/oauth2/**", "/api/appointments/**", "/api/gyms", "/api/users").permitAll()
+                        .requestMatchers("/api/auth/**", "/auth/**", "/api/appointments/**", "/api/gyms", "/api/users").permitAll()
+                        .requestMatchers("/api/payments/qpay/callback", "/api/payment/qpay/callback", "/payment/qpay/callback").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/bookings/stream").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/comments", "/api/comments/**", "/api/gyms/*/comments/**").permitAll()
                         .requestMatchers("/api/admin/notifications/**", "/api/notifications/admin/**")
@@ -49,7 +48,6 @@ public class SecurityConfig {
                         .requestMatchers("/error").permitAll()
                         .anyRequest().authenticated()
                 )
-                .oauth2Login(oauth2 -> oauth2.successHandler(oAuth2AuthenticationSuccessHandler))
                 .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(headersFilter, JwtFilter.class);
 
