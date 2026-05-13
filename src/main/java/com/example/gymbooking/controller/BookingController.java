@@ -460,6 +460,7 @@ public class BookingController {
                 savedPayment = paymentRepository.save(savedPayment);
             }
             paymentResponse.put("invoice", invoice);
+            paymentResponse.put("qpay", qPayService.buildQrPaymentPayload(savedPayment, invoice));
             paymentResponse.put("message", "QR invoice generated");
         } catch (Exception ex) {
             paymentResponse.put("message", "Payment created, but QR invoice generation failed");

@@ -89,7 +89,10 @@ public class PaymentController {
                             payment.setTransactionId(Objects.toString(invoice.get("invoice_id"), null));
                             paymentRepository.save(payment);
                         }
-                        return ResponseEntity.ok(invoice);
+                        Map<String, Object> response = new HashMap<>();
+                        response.put("invoice", invoice);
+                        response.put("qpay", qPayService.buildQrPaymentPayload(payment, invoice));
+                        return ResponseEntity.ok(response);
                     } catch (IllegalStateException ex) {
                         log.error("QPay invoice backend error. paymentId={}, bookingId={}, userId={}, amount={}, message={}",
                                 payment.getId(),
