@@ -3,13 +3,16 @@ package com.example.gymbooking.controller;
 import com.example.gymbooking.dto.CreateBookingRequest;
 import com.example.gymbooking.model.Gym;
 import com.example.gymbooking.model.Booking;
+import com.example.gymbooking.model.Payment;
 import com.example.gymbooking.model.Slot;
 import com.example.gymbooking.model.User;
 import com.example.gymbooking.repository.BookingRepository;
 import com.example.gymbooking.repository.GymRepository;
+import com.example.gymbooking.repository.PaymentRepository;
 import com.example.gymbooking.repository.SlotRepository;
 import com.example.gymbooking.service.EmailService;
 import com.example.gymbooking.service.NotificationService;
+import com.example.gymbooking.service.QPayService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -34,6 +37,7 @@ import java.time.format.DateTimeParseException;
 import java.time.temporal.ChronoUnit;
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -50,6 +54,8 @@ public class BookingController {
     private final NotificationService notificationService;
     private final SlotRepository slotRepository;
     private final GymRepository gymRepository;
+    private final PaymentRepository paymentRepository;
+    private final QPayService qPayService;
     private final boolean paymentEnabled;
 
     public BookingController(BookingRepository bookingRepository,
@@ -57,12 +63,16 @@ public class BookingController {
                              NotificationService notificationService,
                              SlotRepository slotRepository,
                              GymRepository gymRepository,
+                             PaymentRepository paymentRepository,
+                             QPayService qPayService,
                              @Value("${app.payment.enabled:false}") boolean paymentEnabled) {
         this.bookingRepository = bookingRepository;
         this.emailService = emailService;
         this.notificationService = notificationService;
         this.slotRepository = slotRepository;
         this.gymRepository = gymRepository;
+        this.paymentRepository = paymentRepository;
+        this.qPayService = qPayService;
         this.paymentEnabled = paymentEnabled;
         System.out.println("=== PAYMENT CONFIG ===");
         System.out.println("paymentEnabled: " + paymentEnabled);
@@ -332,11 +342,14 @@ public class BookingController {
                 createdBookings.add(savedBooking);
             }
             
-            return ResponseEntity.ok(Map.of(
-                "message", "Multiple bookings created successfully",
-                "bookings", createdBookings,
-                "count", createdBookings.size()
-            ));
+            Map<String, Object> response = new HashMap<>();
+            response.put("message", "Multiple bookings created successfully");
+            response.put("bookings", createdBookings);
+            response.put("count", createdBookings.size());
+            if (paymentEnabled) {
+                response.put("payments", createPendingPaymentsWithInvoices(createdBookings, currentUser));
+            }
+            return ResponseEntity.ok(response);
         }
 
         // Handle single time slot (original logic)
@@ -410,7 +423,49 @@ public class BookingController {
         safelySendBookingEmail(savedBooking);
         safelyCreateBookingNotifications(currentUser, savedBooking);
 
-        return ResponseEntity.ok(savedBooking);
+        if (!paymentEnabled) {
+            return ResponseEntity.ok(savedBooking);
+        }
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("booking", savedBooking);
+        response.put("payment", createPendingPaymentWithInvoice(savedBooking, currentUser));
+        return ResponseEntity.ok(response);
+    }
+
+    private List<Map<String, Object>> createPendingPaymentsWithInvoices(List<Booking> bookings, User currentUser) {
+        List<Map<String, Object>> payments = new ArrayList<>();
+        for (Booking booking : bookings) {
+            payments.add(createPendingPaymentWithInvoice(booking, currentUser));
+        }
+        return payments;
+    }
+
+    private Map<String, Object> createPendingPaymentWithInvoice(Booking booking, User currentUser) {
+        Payment payment = new Payment();
+        payment.setBooking(booking);
+        payment.setUserId(currentUser.getId());
+        payment.setUser(currentUser);
+        payment.setAmount(booking.getTotalPrice());
+        payment.setPaymentMethod("QPAY");
+        payment.setStatus("PENDING");
+        Payment savedPayment = paymentRepository.save(payment);
+
+        Map<String, Object> paymentResponse = new HashMap<>();
+        paymentResponse.put("payment", savedPayment);
+        try {
+            Map<String, Object> invoice = qPayService.createInvoice(savedPayment);
+            if (invoice.containsKey("invoice_id")) {
+                savedPayment.setTransactionId(Objects.toString(invoice.get("invoice_id"), null));
+                savedPayment = paymentRepository.save(savedPayment);
+            }
+            paymentResponse.put("invoice", invoice);
+            paymentResponse.put("message", "QR invoice generated");
+        } catch (Exception ex) {
+            paymentResponse.put("message", "Payment created, but QR invoice generation failed");
+            paymentResponse.put("invoiceError", ex.getMessage());
+        }
+        return paymentResponse;
     }
 
     @GetMapping("/my")
